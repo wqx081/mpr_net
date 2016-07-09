@@ -4,7 +4,6 @@
 #include "base/critical_section.h"
 #include "base/location.h"
 #include "base/scoped_ref_ptr.h"
-#include "base/time.h"
 
 #include "net/sharedexclusivelock.h"
 #include "net/message_handler.h"
@@ -35,7 +34,7 @@ class MessageQueueManager {
   static void ProcessAllMessageQueues();
 
  private:
-  static MessageQueueManager* Instace();
+  static MessageQueueManager* Instance();
   
   MessageQueueManager();
   ~MessageQueueManager();
@@ -46,7 +45,7 @@ class MessageQueueManager {
   void ProcessAllMessageQueuesInternal();
 
   static MessageQueueManager* instance_;
-  std::vector<MessageQueue *>  message_queue_;
+  std::vector<MessageQueue *>  message_queues_;
   base::CriticalSection crit_;
 };
 
@@ -240,9 +239,8 @@ base::CritScope cs(&crit_);  // msgq_.size() is not thread safe.
   std::unique_ptr<SocketServer> own_ss_;
   SharedExclusiveLock ss_lock_;
 
-  //TODO
-  // DISALLOW_IMPLICIT_CONSTRUCTORS(MessageQueue)
-
+  MessageQueue() = delete;
+  DISALLOW_COPY_AND_ASSIGN(MessageQueue);
 };
 
 

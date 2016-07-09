@@ -113,6 +113,16 @@ Atomic64 NoBarrier_Load(volatile const Atomic64* ptr);
 Atomic64 Acquire_Load(volatile const Atomic64* ptr);
 Atomic64 Release_Load(volatile const Atomic64* ptr);
 
+template <typename T>
+inline static T* AcquireLoadPtr(T* volatile* ptr) {
+  return __atomic_load_n(ptr, __ATOMIC_ACQUIRE);
+}
+
+template <typename T>
+inline static T* CompareAndSwapPtr(T* volatile* ptr, T* old_value, T* new_value) {
+  return __sync_val_compare_and_swap(ptr, old_value, new_value);
+}
+
 }  // namespace subtle
 }  // namespace base
 

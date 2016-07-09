@@ -2,6 +2,7 @@
 #define BASE_MACROS_H_
 
 #include <glog/logging.h>
+#include <assert.h>
 
 #define OFFSET_OF(type, field) \
   (reinterpret_cast<intptr_t>(&(reinterpret_cast<type*>(16)->field)) - 16)
@@ -40,5 +41,7 @@ inline void USE(T) {}
 #define MPR_UNLIKELY(condition) (__builtin_expect(!!(condition), 0))
 #define MPR_LIKELY(condition) (__builtin_expect(!!(condition), 1))
 
+#define GetLastError() errno
+#define LAST_SYSTEM_ERROR (GetLastError())
 
 #endif // BASE_MACROS_H_

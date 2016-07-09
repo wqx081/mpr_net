@@ -17,6 +17,8 @@
 #include "base/critical_section.h"
 #include "net/event.h"
 #include "net/trace_event.h"
+#include "base/timeutils.h"
+#include "net/platform_thread.h"
 
 #include <glog/logging.h>
 
@@ -85,14 +87,15 @@ class EventLogger final {
   EventLogger()
       : logging_thread_(EventTracingThreadFunc, this, "EventTracingThread"),
         shutdown_event_(false, false) {}
-  ~EventLogger() { RTC_DCHECK(thread_checker_.CalledOnValidThread()); }
+  ~EventLogger() { DCHECK(thread_checker_.CalledOnValidThread()); }
 
   void AddTraceEvent(const char* name,
                      const unsigned char* category_enabled,
                      char phase,
                      uint64_t timestamp,
                      int pid,
-                     pthread_t thread_id) {
+                     net::PlatformThreadId thread_id) {
+    (void) pid;
     base::CritScope lock(&crit_);
     trace_events_.push_back(
         {name, category_enabled, phase, timestamp, 1, thread_id});
@@ -101,7 +104,7 @@ class EventLogger final {
 // The TraceEvent format is documented here:
 // https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview
   void Log() {
-    RTC_DCHECK(output_file_);
+    DCHECK(output_file_);
     static const int kLoggingIntervalMs = 100;
     fprintf(output_file_, "{ \"traceEvents\": [\n");
     bool has_logged_event = false;
@@ -109,7 +112,7 @@ class EventLogger final {
       bool shutting_down = shutdown_event_.Wait(kLoggingIntervalMs);
       std::vector<TraceEvent> events;
       {
-        rtc::CritScope lock(&crit_);
+        base::CritScope lock(&crit_);
         trace_events_.swap(events);
       }
       for (const TraceEvent& e : events) {
@@ -119,11 +122,7 @@ class EventLogger final {
                 ", \"ph\": \"%c\""
                 ", \"ts\": %" PRIu64
                 ", \"pid\": %d"
-#if defined(WEBRTC_WIN)
-                ", \"tid\": %lu"
-#else
                 ", \"tid\": %d"
-#endif  // defined(WEBRTC_WIN)
                 "}\n",
                 has_logged_event ? "," : " ", e.name, e.category_enabled,
                 e.phase, e.timestamp, e.pid, e.tid);
@@ -139,13 +138,13 @@ class EventLogger final {
   }
 
   void Start(FILE* file, bool owned) {
-    RTC_DCHECK(thread_checker_.CalledOnValidThread());
-    RTC_DCHECK(file);
-    RTC_DCHECK(!output_file_);
+    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK(file);
+    DCHECK(!output_file_);
     output_file_ = file;
     output_file_owned_ = owned;
     {
-      rtc::CritScope lock(&crit_);
+      base::CritScope lock(&crit_);
       // Since the atomic fast-path for adding events to the queue can be
       // bypassed while the logging thread is shutting down there may be some
       // stale events in the queue, hence the vector needs to be cleared to not
@@ -154,8 +153,8 @@ class EventLogger final {
     }
     // Enable event logging (fast-path). This should be disabled since starting
     // shouldn't be done twice.
-    RTC_CHECK_EQ(0,
-                 rtc::AtomicOps::CompareAndSwap(&g_event_logging_active, 0, 1));
+    CHECK_EQ(0,
+                 base::subtle::Acquire_CompareAndSwap(&g_event_logging_active, 0, 1));
 
     // Finally start, everything should be set up now.
     logging_thread_.Start();
@@ -164,10 +163,10 @@ class EventLogger final {
   }
 
   void Stop() {
-    RTC_DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK(thread_checker_.CalledOnValidThread());
     TRACE_EVENT_INSTANT0("webrtc", "EventLogger::Stop");
     // Try to stop. Abort if we're not currently logging.
-    if (rtc::AtomicOps::CompareAndSwap(&g_event_logging_active, 1, 0) == 0)
+    if (base::subtle::Acquire_CompareAndSwap(&g_event_logging_active, 1, 0) == 0)
       return;
 
     // Wake up logging thread to finish writing.
@@ -183,14 +182,14 @@ class EventLogger final {
     char phase;
     uint64_t timestamp;
     int pid;
-    rtc::PlatformThreadId tid;
+    PlatformThreadId tid;
   };
 
-  rtc::CriticalSection crit_;
+  base::CriticalSection crit_;
   std::vector<TraceEvent> trace_events_ GUARDED_BY(crit_);
-  rtc::PlatformThread logging_thread_;
-  rtc::Event shutdown_event_;
-  rtc::ThreadChecker thread_checker_;
+  PlatformThread logging_thread_;
+  Event shutdown_event_;
+  ThreadChecker thread_checker_;
   FILE* output_file_ = nullptr;
   bool output_file_owned_ = false;
 };
@@ -224,21 +223,26 @@ void InternalAddTraceEvent(char phase,
                            const unsigned long long* arg_values,
                            unsigned char flags) {
   // Fast path for when event tracing is inactive.
-  if (rtc::AtomicOps::AcquireLoad(&g_event_logging_active) == 0)
+  if (base::subtle::Acquire_Load(&g_event_logging_active) == 0)
     return;
-
+  (void)id;
+  (void)num_args;
+  (void)arg_names;
+  (void)arg_types;
+  (void)arg_values;
+  (void)flags;
   g_event_logger->AddTraceEvent(name, category_enabled, phase,
-                                rtc::TimeMicros(), 1, rtc::CurrentThreadId());
+                                base::TimeMicros(), 1, net::CurrentThreadId());
 }
 
 }  // namespace
 
 void SetupInternalTracer() {
-  RTC_CHECK(rtc::AtomicOps::CompareAndSwapPtr(
+  DCHECK(base::subtle::CompareAndSwapPtr(
                 &g_event_logger, static_cast<EventLogger*>(nullptr),
                 new EventLogger()) == nullptr);
   g_event_logger = new EventLogger();
-  webrtc::SetupEventTracer(InternalGetCategoryEnabled, InternalAddTraceEvent);
+  SetupEventTracer(InternalGetCategoryEnabled, InternalAddTraceEvent);
 }
 
 void StartInternalCaptureToFile(FILE* file) {
@@ -248,7 +252,7 @@ void StartInternalCaptureToFile(FILE* file) {
 bool StartInternalCapture(const char* filename) {
   FILE* file = fopen(filename, "w");
   if (!file) {
-    LOG(LS_ERROR) << "Failed to open trace file '" << filename
+    LOG(ERROR) << "Failed to open trace file '" << filename
                   << "' for writing.";
     return false;
   }
@@ -262,13 +266,13 @@ void StopInternalCapture() {
 
 void ShutdownInternalTracer() {
   StopInternalCapture();
-  EventLogger* old_logger = rtc::AtomicOps::AcquireLoadPtr(&g_event_logger);
-  RTC_DCHECK(old_logger);
-  RTC_CHECK(rtc::AtomicOps::CompareAndSwapPtr(
+  EventLogger* old_logger = base::subtle::AcquireLoadPtr(&g_event_logger);
+  DCHECK(old_logger);
+  CHECK(base::subtle::CompareAndSwapPtr(
                 &g_event_logger, old_logger,
                 static_cast<EventLogger*>(nullptr)) == old_logger);
   delete old_logger;
-  webrtc::SetupEventTracer(nullptr, nullptr);
+  SetupEventTracer(nullptr, nullptr);
 }
 
 }  // namespace tracing

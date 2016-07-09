@@ -3,16 +3,10 @@ CXXFLAGS += -std=c++11 -Wall -g -c -o
 
 LIB_FILES := -lglog -L/usr/local/lib -lgtest -lgtest_main -lpthread
 
-CPP_SOURCES := ./base/once.cc \
-	./base/mutex.cc \
-	./base/condition_variable.cc \
-	./base/semaphore.cc \
-	./base/time.cc \
-	./base/thread.cc \
-	./base/task_queue.cc \
-	./base/worker_thread.cc \
+CPP_SOURCES :=  \
 	./base/critical_section.cc \
 	./base/location.cc \
+	./base/timeutils.cc \
 	\
 	\
 	./net/ipaddress.cc \
@@ -25,32 +19,35 @@ CPP_SOURCES := ./base/once.cc \
 	./net/sharedexclusivelock.cc \
 	./net/message_handler.cc \
 	./net/message_queue.cc \
+	./net/platform_thread.cc \
+	./net/thread_checker_impl.cc \
+	./net/event_tracer.cc \
+	./net/null_socket_server.cc \
+	./net/thread.cc \
+	./net/signal_thread.cc \
+	./net/async_file.cc \
+	./net/net_helpers.cc \
+	./net/physical_socket_server.cc \
+	./net/network_monitor.cc \
+	./net/stream.cc \
 
 CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 
 
-TESTS := ./base/once_unittest \
+#TESTS := ./base/once_unittest \
 	./base/thread_unittest \
 	./base/worker_thread_unittest \
+
+TESTS := ./net/message_queue_unittest \
 
 
 all: $(CPP_OBJECTS) $(TESTS)
 .cc.o:
 	$(CXX) $(CXXFLAGS) $@ $<
 
-./base/once_unittest: ./base/once_unittest.o
+./net/message_queue_unittest: ./net/message_queue_unittest.o
 	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
-./base/once_unittest.o: ./base/once_unittest.cc
-	$(CXX) $(CXXFLAGS) $@ $<
-
-./base/thread_unittest: ./base/thread_unittest.o
-	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
-./base/thread_unittest.o: ./base/thread_unittest.cc
-	$(CXX) $(CXXFLAGS) $@ $<
-
-./base/worker_thread_unittest: ./base/worker_thread_unittest.o
-	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
-./base/worker_thread_unittest.o: ./base/worker_thread_unittest.cc
+./net/message_queue_unittest.o: ./net/message_queue_unittest.cc
 	$(CXX) $(CXXFLAGS) $@ $<
 
 clean:
