@@ -22,5 +22,7 @@ class SpinLockGuardImpl {
   DISALLOW_COPY_AND_ASSIGN(SpinLockGuardImpl);
 };
 
+typedef SpinLockGuardImpl<SpinLock> SpinLockGuard;
+
 } // namespace fb
 #endif // FB_SPIN_LOCK_H_

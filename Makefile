@@ -9,7 +9,7 @@ CPP_SOURCES :=  \
 	./base/timeutils.cc \
 	\
 	\
-	./net/ip_address.cc \
+	./net/ipaddress.cc \
 	./net/socket_address.cc \
 	./net/sigslot.cc \
 	./net/async_socket.cc \

@@ -6,6 +6,7 @@
 #include "fb/request.h"
 #include "fb/executor.h"
 #include "fb/driable_executor.h"
+#include "fb/notification_queue.h"
 
 #include <boost/intrusive/list.hpp>
 
@@ -57,7 +58,7 @@ class RequestEventBase : public RequestData {
 
 //
 class EventBase : public TimeoutManager,
-                  public DriableExecutor {
+                  public DrivableExecutor {
  public:
   class LoopCallback {
    public:
@@ -76,11 +77,13 @@ class EventBase : public TimeoutManager,
       boost::intrusive::link_mode<boost::intrusive::auto_unlink>> ListHook;
 
     ListHook hook_;
-    typedef boost::intrusive::list<LoopCallback,
-                                   boost::intrusive::member_hook<LoopCallback,
-                                                                 ListHook,
-                                                                 &LoopCallback::host_>,
-                                   boost::intrusive::constant_time_size<false> > List;
+    typedef boost::intrusive::list<
+      LoopCallback,
+      boost::intrusive::member_hook<LoopCallback,
+                                    ListHook,
+                                    &LoopCallback::hook_>,
+      boost::intrusive::constant_time_size<false> > List;
+
     friend class EventBase;
     std::shared_ptr<RequestContext> context_;
   }; // class LoopCallback
@@ -97,7 +100,7 @@ class EventBase : public TimeoutManager,
 
   void RunInLoop(LoopCallback* callback, bool this_iteration=false);
   void RunInLoop(const Cob& c, bool this_iteration=false);
-  void RunInLoop(Co&& c, bool this_iteration=false);
+  void RunInLoop(Cob&& c, bool this_iteration=false);
   void RunOnDestruction(LoopCallback* callback);
   void RunBeforeLoop(LoopCallback* callback);
 
@@ -148,7 +151,7 @@ class EventBase : public TimeoutManager,
 
   double GetAvgLoopTime() const {
     assert(enable_time_measurement_);
-    return avg_loop_time_.get();
+    return avg_loop_time_.Get();
   }
 
   bool IsRunning() const {
@@ -181,13 +184,13 @@ class EventBase : public TimeoutManager,
         : exp_coeff_(-1.0 / time_interval),
           value_(0.0),
           old_busy_leftover_(0) {
-      VLOG(11) << "exp_coeff_" << exp_coeff_ << " " << __PRETTRY_FUNCTION__;
+      VLOG(11) << "exp_coeff_" << exp_coeff_ << " " ; //<< __PRETTRY_FUNCTION__;
     }
 
     void SetTimeInterval(uint64_t time_interval);
     void Reset(double value = 0.0);
     double Get() const { return value_; }
-    void Dampen(double factor)  { return value_ *= factor; }
+    void Dampen(double factor)  { value_ *= factor; }
 
    private:
     double exp_coeff_;
@@ -223,7 +226,7 @@ class EventBase : public TimeoutManager,
   void DetachTimeoutManager(AsyncTimeout* obj) override;
   bool ScheduleTimeout(AsyncTimeout* obj,
                        std::chrono::milliseconds timeout) override;
-  bool CancelTimeout(AsyncTimeout* obj) override;
+  void CancelTimeout(AsyncTimeout* obj) override;
   bool IsInTimeoutManagerThread() override {
     return IsInEventBaseThread();
   }
@@ -282,7 +285,7 @@ class EventBase : public TimeoutManager,
   std::atomic<pthread_t> loop_thread_;
   event_base* evb_;
 
-  std::unique_ptr<NitificationQueue<std::pair<void(*)(void*)>, void*>>> queue_;
+  std::unique_ptr<NotificationQueue<std::pair<void(*)(void*), void*>>> queue_;
   std::unique_ptr<FunctionRunner> fn_runner_;
 
   int64_t max_latency_;
@@ -296,7 +299,7 @@ class EventBase : public TimeoutManager,
   static const int kDefaultIdleWaitUsec = 20000; // 20ms
  
   uint64_t next_loop_cnt_;
-  uint64_t lastest_loop_cnt_;
+  uint64_t latest_loop_cnt_;
   uint64_t start_work_;
 
   std::shared_ptr<EventBaseObserver> observer_;
