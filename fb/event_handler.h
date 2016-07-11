@@ -13,6 +13,11 @@ class EventBase;
 class EventHandler {
  public:
   enum EventFlags {
+    NONE = 0,
+    READ = EV_READ,
+    WRITE = EV_WRITE,
+    READ_WRITE = (READ | WRITE),
+    PERSIST = EV_PERSIST    
   };
 
   explicit EventHandler(EventBase* event_base=nullptr, int fd = -1);
@@ -23,8 +28,24 @@ class EventHandler {
     return RegisterImpl(events, false);
   }
   void UnregisterHandler();
-  bool IsHandlerRegistered() const;
-  
+
+  bool IsHandlerRegistered() const {
+    return EventUtil::IsEventRegistered(&event_);
+  }
+
+  void AttachEventBase(EventBase* event_base);
+  void DetachEventBase();
+  void ChangeHandlerFD(int fd);
+  void InitHandler(EventBase* event_base, int fd);
+  uint16_t GetRegisteredEvents() const {
+    return (IsHandlerRegistered()) ? event_.ev_events : 0;
+  }
+
+  bool RegisterInternalHandler(uint16_t events) {
+    return RegisterImpl(events, true);
+  }
+
+  bool IsPending() const;
 
  private:
   bool RegisterImpl(uint16_t events, bool internal);
