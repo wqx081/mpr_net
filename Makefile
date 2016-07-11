@@ -1,7 +1,7 @@
 CXXFLAGS += -I./
 CXXFLAGS += -std=c++11 -Wall -g -c -o
 
-LIB_FILES := -lglog -L/usr/local/lib -lgtest -lgtest_main -lpthread
+LIB_FILES := -lglog -lgflags -L/usr/local/lib -lgtest -lgtest_main -lpthread
 
 CPP_SOURCES :=  \
 	./base/critical_section.cc \
@@ -9,7 +9,7 @@ CPP_SOURCES :=  \
 	./base/timeutils.cc \
 	\
 	\
-	./net/ipaddress.cc \
+	./net/ip_address.cc \
 	./net/socket_address.cc \
 	./net/sigslot.cc \
 	./net/async_socket.cc \
@@ -48,6 +48,10 @@ CPP_SOURCES :=  \
 	./http/http_common.cc \
 	./http/http_base.cc \
 	./http/http_server.cc \
+	\
+	\
+	\
+	./fb/request.cc \
 
 CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 
@@ -56,12 +60,23 @@ CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 	./base/thread_unittest \
 	./base/worker_thread_unittest \
 
-TESTS := ./net/message_queue_unittest \
+TESTS := \
+	./base/stl_util_unittest \
+	./net/message_queue_unittest \
 	./http/http_server_unittest \
+	./fb/rw_spin_lock_unittest \
+	./fb/scope_guard_unittest \
+	./fb/small_locks_unittest \
+	./fb/spin_lock_unittest \
 
 
 all: $(CPP_OBJECTS) $(TESTS)
 .cc.o:
+	$(CXX) $(CXXFLAGS) $@ $<
+
+./base/stl_util_unittest : ./base/stl_util_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./base/stl_util_unittest.o: ./base/stl_util_unittest.cc
 	$(CXX) $(CXXFLAGS) $@ $<
 
 ./net/message_queue_unittest: ./net/message_queue_unittest.o
@@ -74,9 +89,32 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./http/http_server_unittest.o: ./http/http_server_unittest.cc
 	$(CXX) $(CXXFLAGS) $@ $<
 
+################################### fb
+
+./fb/rw_spin_lock_unittest: ./fb/rw_spin_lock_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/rw_spin_lock_unittest.o: ./fb/rw_spin_lock_unittest.cc
+	$(CXX) $(CXXFLAGS) $@ $<
+
+./fb/scope_guard_unittest : ./fb/scope_guard_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/scope_guard_unittest.o: ./fb/scope_guard_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/small_locks_unittest: ./fb/small_locks_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/small_locks_unittest.o: ./fb/small_locks_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/spin_lock_unittest: ./fb/spin_lock_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/spin_lock_unittest.o: ./fb/spin_lock_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
 clean:
 	rm -fr base/*.o
 	rm -fr crypto/*.o
 	rm -fr net/*.o
 	rm -fr http/*.o
+	rm -fr fb/*.o
 	rm -fr $(TESTS)

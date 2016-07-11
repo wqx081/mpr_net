@@ -54,4 +54,14 @@ inline void USE(T) {}
 
 #define FALLTHROUGH() do {} while (0)
 
+// for fb
+//
+struct MaxAlign { char c; } __attribute__((__aligned__));
+
+#define FB_PACK_ATTR  __attribute__((__packed__))/**/
+#define FB_PACK_PUSH /**/
+#define FB_PACK_POP /**/
+
+
+
 #endif // BASE_MACROS_H_
