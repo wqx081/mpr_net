@@ -3,6 +3,7 @@
 
 #include "base/macros.h"
 #include "base/atomicops.h"
+#include "net/checks.h"
 
 #include <pthread.h>
 

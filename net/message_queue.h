@@ -30,6 +30,7 @@ class MessageQueueManager {
   static void Remove(MessageQueue *message_queue);
   static void Clear(MessageHandler *handler);
 
+  // 
   static bool IsInitialized();
   static void ProcessAllMessageQueues();
 
@@ -124,6 +125,8 @@ struct Message {
 
 typedef std::list<Message> MessageList;
 
+// DelayedMessage goes into a priority queue, sorted by trigger time.
+// Messages with the same trigger time are processed in num_ (FIFO) order.
 class DelayedMessage {
  public:
   DelayedMessage(int64_t delay,
@@ -148,6 +151,12 @@ class MessageQueue {
  public:
   static const int kForever = -1;
   
+  // Create a new MessageQueue and optionally assign it to the passed
+  // SocketServer.
+  // Subclass that override Clear should pass false for init_queue
+  // and call DoInit() from their constructor to prevent races with
+  // the MessageQueueManager using the object while the vtable is
+  // still being created.
   MessageQueue(SocketServer* ss, bool init_queue);
   MessageQueue(std::unique_ptr<SocketServer> ss, bool init_queue);
 
@@ -160,6 +169,10 @@ class MessageQueue {
   virtual bool IsQuitting();
   virtual void Restart();
 
+  // Get() will process I/O until:
+  //  0) A message is available (return true)
+  //  1) cms Wait seconds have elapsed (return false)
+  //  2) Stop() is called (returns false)
   virtual bool Get(Message *pmsg, int cmsWait = kForever,
                    bool process_io = true);
   virtual bool Peek(Message *pmsg, int cmsWait = 0);
@@ -189,6 +202,7 @@ class MessageQueue {
   virtual void Dispatch(Message *pmsg);
   virtual void ReceiveSends();
   
+  // Amount of tiem until the next message can be retrieved.
   virtual int GetDelay();
 
   bool empty() const { return size() == 0u; }
@@ -235,7 +249,9 @@ base::CritScope cs(&crit_);  // msgq_.size() is not thread safe.
   bool fDestroyed_;
 
  private:
+  // The SocketServer might not be owned by MessageQueue.
   SocketServer* ss_;
+  // Used if SocketServer ownership lies with |this|.
   std::unique_ptr<SocketServer> own_ss_;
   SharedExclusiveLock ss_lock_;
 

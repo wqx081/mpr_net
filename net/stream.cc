@@ -445,7 +445,7 @@ bool FileStream::GetAvailable(size_t* size) const {
   return true;
 }
 
-bool FileStream::ReserveSize(size_t size) {
+bool FileStream::ReserveSize(size_t /*size*/) {
   // TODO: extend the file to the proper length
   return true;
 }
@@ -467,8 +467,6 @@ bool FileStream::Flush() {
   return false;
 }
 
-#if defined(WEBRTC_POSIX) && !defined(__native_client__)
-
 bool FileStream::TryLock() {
   if (file_ == NULL) {
     // Stream not open.
@@ -489,8 +487,6 @@ bool FileStream::Unlock() {
   return flock(fileno(file_), LOCK_UN) == 0;
 }
 
-#endif
-
 void FileStream::DoClose() {
   fclose(file_);
 }
@@ -510,6 +506,7 @@ StreamState MemoryStreamBase::GetState() const {
 
 StreamResult MemoryStreamBase::Read(void* buffer, size_t bytes,
                                     size_t* bytes_read, int* error) {
+  (void) error;
   if (seek_position_ >= data_length_) {
     return SR_EOS;
   }
@@ -591,6 +588,7 @@ bool MemoryStreamBase::ReserveSize(size_t size) {
 }
 
 StreamResult MemoryStreamBase::DoReserve(size_t size, int* error) {
+  (void) error;
   return (buffer_length_ >= size) ? SR_SUCCESS : SR_EOS;
 }
 
@@ -725,6 +723,7 @@ StreamState FifoBuffer::GetState() const {
 
 StreamResult FifoBuffer::Read(void* buffer, size_t bytes,
                               size_t* bytes_read, int* error) {
+  (void)error;
   CritScope cs(&crit_);
   const bool was_writable = data_length_ < buffer_length_;
   size_t copy = 0;
@@ -749,6 +748,7 @@ StreamResult FifoBuffer::Read(void* buffer, size_t bytes,
 
 StreamResult FifoBuffer::Write(const void* buffer, size_t bytes,
                                size_t* bytes_written, int* error) {
+  (void) error;
   CritScope cs(&crit_);
 
   const bool was_readable = (data_length_ > 0);
@@ -955,6 +955,7 @@ StreamState StringStream::GetState() const {
 
 StreamResult StringStream::Read(void* buffer, size_t buffer_len,
                                       size_t* read, int* error) {
+  (void) error;
   size_t available = std::min(buffer_len, str_.size() - read_pos_);
   if (!available)
     return SR_EOS;

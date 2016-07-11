@@ -1,4 +1,5 @@
 #include "base/time.h"
+#include "net/checks.h"
 
 #include <time.h>
 #include <fcntl.h>
@@ -7,7 +8,6 @@
 
 #include <ostream>
 
-#include <glog/logging.h>
 
 namespace base {
 
@@ -80,8 +80,8 @@ int64_t TimeDelta::InNanoseconds() const {
 }
 
 TimeDelta TimeDelta::FromTimespec(struct timespec ts) {
-  DCHECK_GE(ts.tv_nsec, 0);
-  DCHECK_LT(ts.tv_nsec,
+  MPR_DCHECK_GE(ts.tv_nsec, 0);
+  MPR_DCHECK_LT(ts.tv_nsec,
             static_cast<long>(Time::kNanosecondsPerSecond));  // NOLINT
   return TimeDelta(ts.tv_sec * Time::kMicrosecondsPerSecond +
                     ts.tv_nsec / Time::kNanosecondsPerMicrosecond);
@@ -104,16 +104,16 @@ std::string Time::Format(const std::string format) const {
   //struct tm* tmp = gmtime(&(tv.tv_sec));
   struct tm* tmp = std::localtime(&(tv.tv_sec));
 
-  DCHECK(tmp != nullptr);  
+  MPR_DCHECK(tmp != nullptr);  
   int n = strftime(buf, 64, format.c_str(), tmp);
-  DCHECK(n > 0 && n < 64);
+  MPR_DCHECK(n > 0 && n < 64);
   return std::string(buf, n);
 }
 
 Time Time::Now() {
   struct timeval tv;
   int result = gettimeofday(&tv, nullptr);
-  DCHECK_EQ(0, result);
+  MPR_DCHECK_EQ(0, result);
   return FromTimeval(tv);
 }
 
@@ -123,8 +123,8 @@ Time Time::NowFromSystemTime() {
 
 
 Time Time::FromTimespec(struct timespec ts) {
-  DCHECK(ts.tv_nsec >= 0);
-  DCHECK(ts.tv_nsec < static_cast<long>(kNanosecondsPerSecond));  // NOLINT
+  MPR_DCHECK(ts.tv_nsec >= 0);
+  MPR_DCHECK(ts.tv_nsec < static_cast<long>(kNanosecondsPerSecond));  // NOLINT
   if (ts.tv_nsec == 0 && ts.tv_sec == 0) {
     return Time();
   }
@@ -154,8 +154,8 @@ struct timespec Time::ToTimespec() const {
 }
 
 Time Time::FromTimeval(struct timeval tv) {
-  DCHECK(tv.tv_usec >= 0);
-  DCHECK(tv.tv_usec < static_cast<suseconds_t>(kMicrosecondsPerSecond));
+  MPR_DCHECK(tv.tv_usec >= 0);
+  MPR_DCHECK(tv.tv_usec < static_cast<suseconds_t>(kMicrosecondsPerSecond));
   if (tv.tv_usec == 0 && tv.tv_sec == 0) {
     return Time();
   }
@@ -192,7 +192,7 @@ TimeTicks TimeTicks::HighResolutionNow() {
   int64_t ticks;
   struct timespec ts;
   int result = clock_gettime(CLOCK_MONOTONIC, &ts);
-  DCHECK_EQ(0, result);
+  MPR_DCHECK_EQ(0, result);
   //USE(result);
   ticks = (ts.tv_sec * Time::kMicrosecondsPerSecond +
            ts.tv_nsec / Time::kNanosecondsPerMicrosecond);

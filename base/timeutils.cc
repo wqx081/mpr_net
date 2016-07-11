@@ -1,10 +1,9 @@
 #include "base/timeutils.h"
+#include "net/checks.h"
 
 #include <stdint.h>
 
 #include <sys/time.h>
-
-#include <glog/logging.h>
 
 namespace base {
 
@@ -51,7 +50,7 @@ uint64_t TimeMicros() {
 }
 
 int64_t TimeAfter(int64_t elapsed) {
-  DCHECK_GE(elapsed, 0);
+  MPR_DCHECK_GE(elapsed, 0);
   return TimeMillis() + elapsed;
 }
 

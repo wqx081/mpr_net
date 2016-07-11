@@ -38,9 +38,4 @@ AsyncSocket* NullSocketServer::CreateAsyncSocket(int /* family */,
 }
 
 
-//TODO(wqx):
-std::unique_ptr<SocketServer> SocketServer::CreateDefault() {
-  return std::unique_ptr<SocketServer>(new NullSocketServer);
-}
-
 }  // namespace rtc

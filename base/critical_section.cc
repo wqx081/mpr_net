@@ -23,10 +23,10 @@ void CriticalSection::Enter() const {
   pthread_mutex_lock(&mutex_);
 #if CS_DEBUG_CHECKS
   if (!recursion_count_) {
-    RTC_DCHECK(!thread_);
+    RTC_MPR_DCHECK(!thread_);
     thread_ = CurrentThreadRef();
   } else {
-    RTC_DCHECK(CurrentThreadIsOwner());
+    RTC_MPR_DCHECK(CurrentThreadIsOwner());
   }
   ++recursion_count_;
 #endif
@@ -37,10 +37,10 @@ bool CriticalSection::TryEnter() const {
     return false;
 #if CS_DEBUG_CHECKS
   if (!recursion_count_) {
-    RTC_DCHECK(!thread_);
+    RTC_MPR_DCHECK(!thread_);
     thread_ = CurrentThreadRef();
   } else {
-    RTC_DCHECK(CurrentThreadIsOwner());
+    RTC_MPR_DCHECK(CurrentThreadIsOwner());
   }
   ++recursion_count_;
 #endif
@@ -48,10 +48,10 @@ bool CriticalSection::TryEnter() const {
 }
 
 void CriticalSection::Leave() const {
-  DCHECK(CurrentThreadIsOwner());
+  MPR_DCHECK(CurrentThreadIsOwner());
 #if CS_DEBUG_CHECKS
   --recursion_count_;
-  RTC_DCHECK(recursion_count_ >= 0);
+  RTC_MPR_DCHECK(recursion_count_ >= 0);
   if (!recursion_count_)
     thread_ = 0;
 #endif
@@ -84,7 +84,7 @@ TryCritScope::TryCritScope(const CriticalSection* cs)
 }
 
 TryCritScope::~TryCritScope() {
-  CS_DEBUG_CODE(RTC_DCHECK(lock_was_called_));
+  CS_DEBUG_CODE(RTC_MPR_DCHECK(lock_was_called_));
   if (locked_)
     cs_->Leave();
 }
@@ -104,7 +104,7 @@ void GlobalLockPod::Lock() {
 
 void GlobalLockPod::Unlock() {
   int old_value = subtle::Acquire_CompareAndSwap(&lock_acquired, 1, 0);
-  DCHECK_EQ(1, old_value) << "Unlock called without calling Lock first";
+  MPR_DCHECK_EQ(1, old_value) << "Unlock called without calling Lock first";
 }
 
 GlobalLock::GlobalLock() {

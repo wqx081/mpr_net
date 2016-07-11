@@ -31,6 +31,8 @@
 #include "base/byteorder.h"
 #include "net/null_socket_server.h"
 #include "base/timeutils.h"
+#include "net/checks.h"
+#include "net/logging.h"
 
 #include <netinet/tcp.h>  // for TCP_NODELAY
 #define IP_MTU 14 // Until this is integrated from linux/in.h to netinet/in.h
@@ -65,7 +67,7 @@ PhysicalSocket::PhysicalSocket(PhysicalSocketServer* ss, SOCKET s)
 
     int type = SOCK_STREAM;
     socklen_t len = sizeof(type);
-    DCHECK(0 == getsockopt(s_, SOL_SOCKET, SO_TYPE, (SockOptArg)&type, &len));
+    MPR_DCHECK(0 == getsockopt(s_, SOL_SOCKET, SO_TYPE, (SockOptArg)&type, &len));
     udp_ = (SOCK_DGRAM == type);
   }
 }
@@ -95,7 +97,7 @@ SocketAddress PhysicalSocket::GetLocalAddress() const {
   if (result >= 0) {
     SocketAddressFromSockAddrStorage(addr_storage, &address);
   } else {
-    LOG(WARNING) << "GetLocalAddress: unable to get local addr, socket="
+    LOG_F(LS_WARNING) << "GetLocalAddress: unable to get local addr, socket="
                     << s_;
   }
   return address;
@@ -112,7 +114,7 @@ SocketAddress PhysicalSocket::GetRemoteAddress() const {
   if (result >= 0) {
     SocketAddressFromSockAddrStorage(addr_storage, &address);
   } else {
-    LOG(WARNING) << "GetRemoteAddress: unable to get remote addr, socket="
+    LOG_F(LS_WARNING) << "GetRemoteAddress: unable to get remote addr, socket="
                     << s_;
   }
   return address;
@@ -134,7 +136,7 @@ int PhysicalSocket::Bind(const SocketAddress& bind_addr) {
     int result =
         ss_->network_binder()->BindSocketToNetwork(s_, bind_addr.ipaddr());
     if (result < 0) {
-      LOG(INFO) << "Binding socket to network address "
+      LOG_F(LS_INFO) << "Binding socket to network address "
                    << bind_addr.ipaddr().ToString() << " result " << result;
     }
   }
@@ -596,7 +598,7 @@ class EventDispatcher : public Dispatcher {
  public:
   EventDispatcher(PhysicalSocketServer* ss) : ss_(ss), fSignaled_(false) {
     if (pipe(afd_) < 0)
-      LOG(ERROR) << "pipe failed";
+      LOG_F(LS_ERROR) << "pipe failed";
     ss_->Add(this);
   }
 
@@ -626,7 +628,7 @@ class EventDispatcher : public Dispatcher {
     CritScope cs(&crit_);
     if (fSignaled_) {
       uint8_t b[4];  // Allow for reading more than 1 byte, but expect 1.
-      DCHECK(1 == read(afd_[0], b, sizeof(b)));
+      MPR_DCHECK(1 == read(afd_[0], b, sizeof(b)));
       fSignaled_ = false;
     }
   }
@@ -714,7 +716,7 @@ class PosixSignalHandler {
  private:
   PosixSignalHandler() {
     if (pipe(afd_) < 0) {
-      LOG(ERROR) << "pipe failed";
+      LOG_F(LS_ERROR) << "pipe failed";
       return;
     }
     if (fcntl(afd_[0], F_SETFL, O_NONBLOCK) < 0) {
@@ -1058,7 +1060,7 @@ bool PhysicalSocketServer::Wait(int cmsWait, bool process_io) {
     // If error, return error.
     if (n < 0) {
       if (errno != EINTR) {
-        LOG(ERROR) << "select";
+        LOG(LS_ERROR) << "select";
         return false;
       }
       // Else ignore the error and keep going. If this EINTR was for one of the
@@ -1184,13 +1186,13 @@ bool PhysicalSocketServer::InstallSignal(int signum, void (*handler)(int)) {
   struct sigaction act;
   // It doesn't really matter what we set this mask to.
   if (sigemptyset(&act.sa_mask) != 0) {
-    LOG(ERROR) << "Couldn't set mask";
+    LOG(LS_ERROR) << "Couldn't set mask";
     return false;
   }
   act.sa_handler = handler;
   act.sa_flags = SA_RESTART;
   if (sigaction(signum, &act, NULL) != 0) {
-    LOG(ERROR) << "Couldn't set sigaction";
+    LOG(LS_ERROR) << "Couldn't set sigaction";
     return false;
   }
   return true;

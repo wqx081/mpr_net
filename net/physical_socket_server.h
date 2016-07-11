@@ -14,6 +14,7 @@ typedef int SOCKET;
 
 namespace net {
 
+// Event constants for the Dispatcher class.
 enum DispatcherEvent {
   DE_READ    = 0x0001,
   DE_WRITE   = 0x0002,
@@ -24,6 +25,7 @@ enum DispatcherEvent {
 
 class Signaler;
 class PosixSignalDispatcher;
+
 
 class Dispatcher {
  public:
@@ -48,6 +50,7 @@ class PhysicalSocketServer : public SocketServer {
   AsyncSocket* CreateAsyncSocket(int type) override;
   AsyncSocket* CreateAsyncSocket(int family, int type) override;
 
+  // Internal Factory for Accept (virtual so it can be overwritten in tests).
   virtual AsyncSocket* WrapSocket(SOCKET s);
 
   // SocketServer:
@@ -58,6 +61,9 @@ class PhysicalSocketServer : public SocketServer {
   void Remove(Dispatcher* dispatcher);
 
   AsyncFile* CreateFile(int fd);
+  // Sets the function to be executed in response to the specified POSIX
+  // signal.
+  // The function is executed from inside Wait() using the "self-pipetrick"
   virtual bool SetPosixSignalHandler(int signum, void (*handler)(int));
   
  protected:
@@ -77,95 +83,100 @@ base::CriticalSection crit_;
 
 };
 
-  class PhysicalSocket : public AsyncSocket, public sigslot::has_slots<> {
-   public:
-    PhysicalSocket(PhysicalSocketServer* ss, SOCKET s = INVALID_SOCKET);
-    ~PhysicalSocket() override;
+class PhysicalSocket : public AsyncSocket, 
+	               public sigslot::has_slots<> {
+ public:
+  PhysicalSocket(PhysicalSocketServer* ss, SOCKET s = INVALID_SOCKET);
+  ~PhysicalSocket() override;
   
-    virtual bool Create(int family, int type);
+  virtual bool Create(int family, int type);
   
-    SocketAddress GetLocalAddress() const override;
-    SocketAddress GetRemoteAddress() const override;
+  SocketAddress GetLocalAddress() const override;
+  SocketAddress GetRemoteAddress() const override;
   
-    int Bind(const SocketAddress& bind_addr) override;
-    int Connect(const SocketAddress& addr) override;
+  int Bind(const SocketAddress& bind_addr) override;
+  int Connect(const SocketAddress& addr) override;
   
-    int GetError() const override;
-    void SetError(int error) override;
+  int GetError() const override;
+  void SetError(int error) override;
   
-    ConnState GetState() const override;
+  ConnState GetState() const override;
   
-    int GetOption(Option opt, int* value) override;
-    int SetOption(Option opt, int value) override;
+  int GetOption(Option opt, int* value) override;
+  int SetOption(Option opt, int value) override;
+ 
+  int Send(const void* pv, size_t cb) override;
+  int SendTo(const void* buffer,
+             size_t length,
+             const SocketAddress& addr) override;
   
-    int Send(const void* pv, size_t cb) override;
-    int SendTo(const void* buffer,
-                              size_t length,
-                              const SocketAddress& addr) override;
+  int Recv(void* buffer, size_t length, int64_t* timestamp) override;
+  int RecvFrom(void* buffer,
+               size_t length,
+               SocketAddress* out_addr,
+               int64_t* timestamp) override;
   
-    int Recv(void* buffer, size_t length, int64_t* timestamp) override;
-    int RecvFrom(void* buffer,
-                                  size_t length,
-                                  SocketAddress* out_addr,
-                                  int64_t* timestamp) override;
+  int Listen(int backlog) override;
+  AsyncSocket* Accept(SocketAddress* out_addr) override;
   
-    int Listen(int backlog) override;
-    AsyncSocket* Accept(SocketAddress* out_addr) override;
+  int Close() override;
   
-    int Close() override;
+  int EstimateMTU(uint16_t* mtu) override;
   
-    int EstimateMTU(uint16_t* mtu) override;
+  SocketServer* socketserver() { return ss_; }
   
-    SocketServer* socketserver() { return ss_; }
+ protected:
+  int DoConnect(const SocketAddress& connect_addr);
   
-   protected:
-    int DoConnect(const SocketAddress& connect_addr);
-  
-    virtual SOCKET DoAccept(SOCKET socket, sockaddr* addr, socklen_t* addrlen);
-    virtual int DoSend(SOCKET socket, const char* buf, int len, int flags);
-    virtual int DoSendTo(SOCKET socket, const char* buf, int len, int flags,
-                                                  const struct sockaddr* dest_addr, socklen_t addrlen);
+  virtual SOCKET DoAccept(SOCKET socket, sockaddr* addr, socklen_t* addrlen);
+  virtual int DoSend(SOCKET socket, const char* buf, int len, int flags);
+  virtual int DoSendTo(SOCKET socket, 
+		       const char* buf, 
+		       int len, 
+		       int flags,
+                       const struct sockaddr* dest_addr, 
+		       socklen_t addrlen);
 
-    void OnResolveResult(AsyncResolverInterface* resolver);
-    void UpdateLastError();
-    void MaybeRemapSendError();
-    static int TranslateOption(Option opt, int* slevel, int* sopt);
+  void OnResolveResult(AsyncResolverInterface* resolver);
+  void UpdateLastError();
+  void MaybeRemapSendError();
+  static int TranslateOption(Option opt, int* slevel, int* sopt);
     
-    PhysicalSocketServer* ss_;
-    SOCKET s_;
-    uint8_t enabled_events_;
-    bool udp_;
-base::CriticalSection crit_;
-    int error_; // GUARDED_BY(crit_);
-    ConnState state_;
-    AsyncResolver* resolver_;
+  PhysicalSocketServer* ss_;
+  SOCKET s_;
+  uint8_t enabled_events_;
+  bool udp_;
+  base::CriticalSection crit_;
+  int error_; // GUARDED_BY(crit_);
+  ConnState state_;
+  AsyncResolver* resolver_;
   
-  #if !defined(NDEBUG)
-    std::string dbg_addr_;
-  #endif
-  };
+#if !defined(NDEBUG)
+  std::string dbg_addr_;
+#endif
+};
 
-  class SocketDispatcher : public Dispatcher, public PhysicalSocket {
-   public:
-    explicit SocketDispatcher(PhysicalSocketServer *ss);
-    SocketDispatcher(SOCKET s, PhysicalSocketServer *ss);
-    ~SocketDispatcher() override;
+class SocketDispatcher : public Dispatcher, 
+	                 public PhysicalSocket {
+ public:
+  explicit SocketDispatcher(PhysicalSocketServer *ss);
+  SocketDispatcher(SOCKET s, PhysicalSocketServer *ss);
+  ~SocketDispatcher() override;
   
-    bool Initialize();
+  bool Initialize();
   
-    virtual bool Create(int type);
-    bool Create(int family, int type) override;
+  virtual bool Create(int type);
+  bool Create(int family, int type) override;
   
-    int GetDescriptor() override;
-    bool IsDescriptorClosed() override;
+  int GetDescriptor() override;
+  bool IsDescriptorClosed() override;
   
-    uint32_t GetRequestedEvents() override;
-    void OnPreEvent(uint32_t ff) override;
-    void OnEvent(uint32_t ff, int err) override;
+  uint32_t GetRequestedEvents() override;
+  void OnPreEvent(uint32_t ff) override;
+  void OnEvent(uint32_t ff, int err) override;
   
-    int Close() override;
-  
-  };
+  int Close() override;
+};
 
 } // namespace net
 #endif // NET_PHYSICAL_SOCKET_SERVER_H_

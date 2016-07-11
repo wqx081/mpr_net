@@ -1,4 +1,5 @@
 #include "net/network_monitor.h"
+#include "net/logging.h"
 
 namespace {
 const uint32_t UPDATE_NETWORKS_MESSAGE = 1;

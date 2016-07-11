@@ -9,8 +9,13 @@ class SocketFactory {
  public:
   virtual ~SocketFactory() {}
 
+  // Returns a new socket for blocking communication.
+  // The *type* can be SOCK_DGRAM(udp) and SOCK_STREAM(tcp).
   virtual Socket* CreateSocket(int type) = 0;
   virtual Socket* CreateSocket(int family, int type) = 0;
+
+  // Returns a new socket for nonblocking communication.
+  // The *type* can be SOCK_DGRAM(udp) and SOCK_STREAM(tcp).
   virtual AsyncSocket* CreateAsyncSocket(int type) = 0;
   virtual AsyncSocket* CreateAsyncSocket(int family, int type) = 0;
 };

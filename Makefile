@@ -26,10 +26,28 @@ CPP_SOURCES :=  \
 	./net/thread.cc \
 	./net/signal_thread.cc \
 	./net/async_file.cc \
+	./net/async_resolver_interface.cc \
 	./net/net_helpers.cc \
 	./net/physical_socket_server.cc \
 	./net/network_monitor.cc \
+	./net/checks.cc \
+	./net/logging.cc \
 	./net/stream.cc \
+	./net/socket_stream.cc \
+	./net/string_encode.cc \
+	./net/base64.cc \
+	./net/md5.cc \
+	./net/md5_digest.cc \
+	./net/sha1.cc \
+	./net/sha1_digest.cc \
+	./net/string_utils.cc \
+	./net/message_digest.cc \
+	./net/socket_pool.cc \
+	\
+	\
+	./http/http_common.cc \
+	./http/http_base.cc \
+	./http/http_server.cc \
 
 CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 
@@ -39,6 +57,7 @@ CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 	./base/worker_thread_unittest \
 
 TESTS := ./net/message_queue_unittest \
+	./http/http_server_unittest \
 
 
 all: $(CPP_OBJECTS) $(TESTS)
@@ -50,8 +69,14 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./net/message_queue_unittest.o: ./net/message_queue_unittest.cc
 	$(CXX) $(CXXFLAGS) $@ $<
 
+./http/http_server_unittest: ./http/http_server_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./http/http_server_unittest.o: ./http/http_server_unittest.cc
+	$(CXX) $(CXXFLAGS) $@ $<
+
 clean:
 	rm -fr base/*.o
 	rm -fr crypto/*.o
 	rm -fr net/*.o
+	rm -fr http/*.o
 	rm -fr $(TESTS)

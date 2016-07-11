@@ -19,8 +19,8 @@
 #include "net/trace_event.h"
 #include "base/timeutils.h"
 #include "net/platform_thread.h"
-
-#include <glog/logging.h>
+#include "net/checks.h"
+#include "net/logging.h"
 
 
 namespace net {
@@ -87,7 +87,7 @@ class EventLogger final {
   EventLogger()
       : logging_thread_(EventTracingThreadFunc, this, "EventTracingThread"),
         shutdown_event_(false, false) {}
-  ~EventLogger() { DCHECK(thread_checker_.CalledOnValidThread()); }
+  ~EventLogger() { MPR_DCHECK(thread_checker_.CalledOnValidThread()); }
 
   void AddTraceEvent(const char* name,
                      const unsigned char* category_enabled,
@@ -104,7 +104,7 @@ class EventLogger final {
 // The TraceEvent format is documented here:
 // https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview
   void Log() {
-    DCHECK(output_file_);
+    MPR_DCHECK(output_file_);
     static const int kLoggingIntervalMs = 100;
     fprintf(output_file_, "{ \"traceEvents\": [\n");
     bool has_logged_event = false;
@@ -138,9 +138,9 @@ class EventLogger final {
   }
 
   void Start(FILE* file, bool owned) {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    DCHECK(file);
-    DCHECK(!output_file_);
+    MPR_DCHECK(thread_checker_.CalledOnValidThread());
+    MPR_DCHECK(file);
+    MPR_DCHECK(!output_file_);
     output_file_ = file;
     output_file_owned_ = owned;
     {
@@ -153,7 +153,7 @@ class EventLogger final {
     }
     // Enable event logging (fast-path). This should be disabled since starting
     // shouldn't be done twice.
-    CHECK_EQ(0,
+    MPR_CHECK_EQ(0,
                  base::subtle::Acquire_CompareAndSwap(&g_event_logging_active, 0, 1));
 
     // Finally start, everything should be set up now.
@@ -163,7 +163,7 @@ class EventLogger final {
   }
 
   void Stop() {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    MPR_DCHECK(thread_checker_.CalledOnValidThread());
     TRACE_EVENT_INSTANT0("webrtc", "EventLogger::Stop");
     // Try to stop. Abort if we're not currently logging.
     if (base::subtle::Acquire_CompareAndSwap(&g_event_logging_active, 1, 0) == 0)
@@ -238,7 +238,7 @@ void InternalAddTraceEvent(char phase,
 }  // namespace
 
 void SetupInternalTracer() {
-  DCHECK(base::subtle::CompareAndSwapPtr(
+  MPR_DCHECK(base::subtle::CompareAndSwapPtr(
                 &g_event_logger, static_cast<EventLogger*>(nullptr),
                 new EventLogger()) == nullptr);
   g_event_logger = new EventLogger();
@@ -252,7 +252,7 @@ void StartInternalCaptureToFile(FILE* file) {
 bool StartInternalCapture(const char* filename) {
   FILE* file = fopen(filename, "w");
   if (!file) {
-    LOG(ERROR) << "Failed to open trace file '" << filename
+    LOG_F(LS_ERROR) << "Failed to open trace file '" << filename
                   << "' for writing.";
     return false;
   }
@@ -267,8 +267,8 @@ void StopInternalCapture() {
 void ShutdownInternalTracer() {
   StopInternalCapture();
   EventLogger* old_logger = base::subtle::AcquireLoadPtr(&g_event_logger);
-  DCHECK(old_logger);
-  CHECK(base::subtle::CompareAndSwapPtr(
+  MPR_DCHECK(old_logger);
+  MPR_CHECK(base::subtle::CompareAndSwapPtr(
                 &g_event_logger, old_logger,
                 static_cast<EventLogger*>(nullptr)) == old_logger);
   delete old_logger;

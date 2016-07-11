@@ -4,8 +4,6 @@
 #include <memory>
 #include <stdio.h>
 
-#include <glog/log_severity.h>
-
 #if 0
 #include "webrtc/base/basictypes.h"
 #include "webrtc/base/buffer.h"
@@ -24,8 +22,8 @@
 #include "net/message_queue.h"
 #include "net/sigslot.h"
 #include "net/thread_annotations.h"
-
-typedef LogServerity LoggingSeverity;
+#include "net/checks.h"
+#include "net/logging.h"
 
 using namespace base;
 
@@ -138,7 +136,7 @@ class StreamInterface : public MessageHandler {
   // processed.  Read and ConsumeReadData invalidate the buffer returned by
   // GetReadData.
   virtual const void* GetReadData(size_t* data_len);
-  virtual void ConsumeReadData(size_t used) {}
+  virtual void ConsumeReadData(size_t /* used */) {}
 
   // GetWriteBuffer returns a pointer to a buffer which is owned by the stream.
   // The buffer has a capacity of buf_len bytes.  NULL is returned if there is
@@ -152,7 +150,7 @@ class StreamInterface : public MessageHandler {
   // when it is available.  If the requested amount is too large, return an
   // error.
   virtual void* GetWriteBuffer(size_t* buf_len);
-  virtual void ConsumeWriteBuffer(size_t used) {}
+  virtual void ConsumeWriteBuffer(size_t /* used */) {}
 
   // Write data_len bytes found in data, circumventing any throttling which
   // would could cause SR_BLOCK to be returned.  Returns true if all the data

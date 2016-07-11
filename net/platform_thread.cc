@@ -1,5 +1,5 @@
 #include "net/platform_thread.h"
-
+#include "net/checks.h"
 
 #include <sys/prctl.h>
 #include <sys/syscall.h>
@@ -9,7 +9,7 @@ namespace net {
 PlatformThreadId CurrentThreadId() {
   PlatformThreadId ret;
   ret =  syscall(__NR_gettid);
-  DCHECK(ret);
+  MPR_DCHECK(ret);
   return ret;
 }
 
@@ -42,12 +42,12 @@ PlatformThread::PlatformThread(ThreadRunFunction func,
       name_(thread_name ? thread_name : "webrtc"),
       stop_event_(false, false),
       thread_(0) {
-  DCHECK(func);
-  DCHECK(name_.length() < 64);
+  MPR_DCHECK(func);
+  MPR_DCHECK(name_.length() < 64);
 }
 
 PlatformThread::~PlatformThread() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  MPR_DCHECK(thread_checker_.CalledOnValidThread());
 }
 
 void* PlatformThread::StartThread(void* param) {
@@ -56,16 +56,16 @@ void* PlatformThread::StartThread(void* param) {
 }
 
 void PlatformThread::Start() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!thread_) << "Thread already started?";
+  MPR_DCHECK(thread_checker_.CalledOnValidThread());
+  MPR_DCHECK(!thread_) << "Thread already started?";
   ThreadAttributes attr;
   // Set the stack stack size to 1M.
   pthread_attr_setstacksize(&attr, 1024 * 1024);
-  CHECK_EQ(0, pthread_create(&thread_, &attr, &StartThread, this));
+  MPR_CHECK_EQ(0, pthread_create(&thread_, &attr, &StartThread, this));
 }
 
 bool PlatformThread::IsRunning() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  MPR_DCHECK(thread_checker_.CalledOnValidThread());
   return thread_ != 0;
 }
 
@@ -74,12 +74,12 @@ PlatformThreadRef PlatformThread::GetThreadRef() const {
 }
 
 void PlatformThread::Stop() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  MPR_DCHECK(thread_checker_.CalledOnValidThread());
   if (!IsRunning())
     return;
 
   stop_event_.Set();
-  CHECK_EQ(0, pthread_join(thread_, nullptr));
+  MPR_CHECK_EQ(0, pthread_join(thread_, nullptr));
   thread_ = 0;
 }
 
@@ -96,8 +96,8 @@ void PlatformThread::Run() {
 }
 
 bool PlatformThread::SetPriority(ThreadPriority priority) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(IsRunning());
+  MPR_DCHECK(thread_checker_.CalledOnValidThread());
+  MPR_DCHECK(IsRunning());
 #ifdef WEBRTC_THREAD_RR
   const int policy = SCHED_RR;
 #else

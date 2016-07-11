@@ -1,8 +1,10 @@
 #ifndef BASE_MACROS_H_
 #define BASE_MACROS_H_
 
-#include <glog/logging.h>
+#include <stdio.h>
 #include <assert.h>
+#include <inttypes.h>
+#include <stdint.h>
 
 #define OFFSET_OF(type, field) \
   (reinterpret_cast<intptr_t>(&(reinterpret_cast<type*>(16)->field)) - 16)
@@ -43,5 +45,13 @@ inline void USE(T) {}
 
 #define GetLastError() errno
 #define LAST_SYSTEM_ERROR (GetLastError())
+
+#define STACK_ARRAY(TYPE, LEN) static_cast<TYPE*>(::alloca((LEN)*sizeof(TYPE)))
+
+#define ALIGNP(p, t)                                             \
+	  (reinterpret_cast<uint8_t*>(((reinterpret_cast<uintptr_t>(p) + \
+					  ((t) - 1)) & ~((t) - 1))))
+
+#define FALLTHROUGH() do {} while (0)
 
 #endif // BASE_MACROS_H_

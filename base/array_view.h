@@ -2,6 +2,7 @@
 #define WEBRTC_BASE_ARRAY_VIEW_H_
 
 #include "base/macros.h"
+#include "net/checks.h"
 
 namespace base {
 
@@ -95,8 +96,8 @@ class ArrayView final {
   bool empty() const { return size_ == 0; }
   T* data() const { return data_; }
   T& operator[](size_t idx) const {
-    DCHECK_LT(idx, size_);
-    DCHECK(data_);  // Follows from size_ > idx and the class invariant.
+    MPR_DCHECK_LT(idx, size_);
+    MPR_DCHECK(data_);  // Follows from size_ > idx and the class invariant.
     return data_[idx];
   }
   T* begin() const { return data_; }
@@ -115,7 +116,7 @@ class ArrayView final {
 
  private:
   // Invariant: !data_ iff size_ == 0.
-  void CheckInvariant() const { DCHECK_EQ(!data_, size_ == 0); }
+  void CheckInvariant() const { MPR_DCHECK_EQ(!data_, size_ == 0); }
   T* data_;
   size_t size_;
 };

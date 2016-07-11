@@ -14,6 +14,7 @@
 #include "net/thread.h"
 #include "base/timedelta.h"
 #include "net/null_socket_server.h"
+#include "net/logging.h"
 
 #include <gtest/gtest.h>
 

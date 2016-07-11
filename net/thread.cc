@@ -11,6 +11,7 @@
 #include "net/thread.h"
 #include "net/trace_event.h"
 #include "base/timeutils.h"
+#include "net/logging.h"
 
 #include <assert.h>
 
@@ -165,7 +166,7 @@ bool Thread::Start(Runnable* runnable) {
 
   int error_code = pthread_create(&thread_, &attr, PreRun, init);
   if (0 != error_code) {
-    LOG(ERROR) << "Unable to create pthread, error " << error_code;
+    LOG_F(LS_ERROR) << "Unable to create pthread, error " << error_code;
     return false;
   }
   running_.Set();
@@ -190,7 +191,7 @@ void Thread::Join() {
   if (running()) {
     assert(!IsCurrent());
     if (Current() && !Current()->blocking_calls_allowed_) {
-      LOG(WARNING) << "Waiting for the thread to join, "
+      LOG_F(LS_WARNING) << "Waiting for the thread to join, "
                       << "but blocking calls have been disallowed";
     }
 

@@ -32,7 +32,8 @@ struct SentPacket {
 };
 
 
-// General interface for the socket
+// General interface for the socket implementations of various networks.
+// The methods match those of normal UNIX sockets very closely.
 class Socket {
  public:
   virtual ~Socket() {}

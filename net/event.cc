@@ -1,18 +1,18 @@
 #include "net/event.h"
+#include "net/checks.h"
 
 #include <pthread.h>
 #include <sys/time.h>
 #include <time.h>
 
-#include <glog/logging.h>
 
 namespace net {
 
 Event::Event(bool manual_reset, bool initially_signaled)
     : is_manual_reset_(manual_reset),
       event_status_(initially_signaled) {
-  CHECK(pthread_mutex_init(&event_mutex_, NULL) == 0);
-  CHECK(pthread_cond_init(&event_cond_, NULL) == 0);
+  MPR_CHECK(pthread_mutex_init(&event_mutex_, NULL) == 0);
+  MPR_CHECK(pthread_cond_init(&event_cond_, NULL) == 0);
 }
 
 Event::~Event() {

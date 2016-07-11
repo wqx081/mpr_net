@@ -18,8 +18,9 @@
 #endif
 
 #include "net/ipaddress.h"
+#include "net/logging.h"
+#include "net/checks.h"
 
-#include <glog/logging.h>
 
 namespace net {
 

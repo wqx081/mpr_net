@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/array_view.h"
+#include "net/checks.h"
 
 namespace net {
 
@@ -48,7 +49,7 @@ class BufferT {
  public:
   // An empty BufferT.
   BufferT() : size_(0), capacity_(0), data_(nullptr) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
   }
 
   // Disable copy construction and copy assignment, since copying a buffer is
@@ -60,7 +61,7 @@ class BufferT {
       : size_(buf.size()),
         capacity_(buf.capacity()),
         data_(std::move(buf.data_)) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     buf.OnMovedFrom();
   }
 
@@ -71,7 +72,7 @@ class BufferT {
       : size_(size),
         capacity_(std::max(size, capacity)),
         data_(new T[capacity_]) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
   }
 
   // Construct a buffer and copy the specified number of elements into it.
@@ -102,7 +103,7 @@ class BufferT {
             typename std::enable_if<
                 internal::BufferCompat<T, U>::value>::type* = nullptr>
   const U* data() const {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     return reinterpret_cast<U*>(data_.get());
   }
 
@@ -110,23 +111,23 @@ class BufferT {
             typename std::enable_if<
                 internal::BufferCompat<T, U>::value>::type* = nullptr>
   U* data() {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     return reinterpret_cast<U*>(data_.get());
   }
 
   size_t size() const {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     return size_;
   }
 
   size_t capacity() const {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     return capacity_;
   }
 
   BufferT& operator=(BufferT&& buf) {
-    DCHECK(IsConsistent());
-    DCHECK(buf.IsConsistent());
+    MPR_DCHECK(IsConsistent());
+    MPR_DCHECK(buf.IsConsistent());
     size_ = buf.size_;
     capacity_ = buf.capacity_;
     data_ = std::move(buf.data_);
@@ -135,7 +136,7 @@ class BufferT {
   }
 
   bool operator==(const BufferT& buf) const {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     if (size_ != buf.size_) {
       return false;
     }
@@ -154,12 +155,12 @@ class BufferT {
   bool operator!=(const BufferT& buf) const { return !(*this == buf); }
 
   T& operator[](size_t index) {
-    DCHECK_LT(index, size_);
+    MPR_DCHECK_LT(index, size_);
     return data()[index];
   }
 
   T operator[](size_t index) const {
-    DCHECK_LT(index, size_);
+    MPR_DCHECK_LT(index, size_);
     return data()[index];
   }
 
@@ -169,7 +170,7 @@ class BufferT {
             typename std::enable_if<
                 internal::BufferCompat<T, U>::value>::type* = nullptr>
   void SetData(const U* data, size_t size) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     size_ = 0;
     AppendData(data, size);
   }
@@ -196,7 +197,7 @@ class BufferT {
             typename std::enable_if<
                 internal::BufferCompat<T, U>::value>::type* = nullptr>
   size_t SetData(size_t max_elements, F&& setter) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     size_ = 0;
     return AppendData<U>(max_elements, std::forward<F>(setter));
   }
@@ -207,13 +208,13 @@ class BufferT {
             typename std::enable_if<
                 internal::BufferCompat<T, U>::value>::type* = nullptr>
   void AppendData(const U* data, size_t size) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     const size_t new_size = size_ + size;
     EnsureCapacityWithHeadroom(new_size, true);
     static_assert(sizeof(T) == sizeof(U), "");
     std::memcpy(data_.get() + size_, data, size * sizeof(U));
     size_ = new_size;
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
   }
 
   template <typename U,
@@ -245,15 +246,15 @@ class BufferT {
             typename std::enable_if<
                 internal::BufferCompat<T, U>::value>::type* = nullptr>
   size_t AppendData(size_t max_elements, F&& setter) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     const size_t old_size = size_;
     SetSize(old_size + max_elements);
     U* base_ptr = data<U>() + old_size;
     size_t written_elements = setter(base::ArrayView<U>(base_ptr, max_elements));
 
-    DCHECK_LE(written_elements, max_elements);
+    MPR_DCHECK_LE(written_elements, max_elements);
     size_ = old_size + written_elements;
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     return written_elements;
   }
 
@@ -279,7 +280,7 @@ class BufferT {
   // buffer has been moved from.
   void Clear() {
     size_ = 0;
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
   }
 
   // Swaps two buffers. Also works for buffers that have been moved from.
@@ -292,7 +293,7 @@ class BufferT {
 
  private:
   void EnsureCapacityWithHeadroom(size_t capacity, bool extra_headroom) {
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
     if (capacity <= capacity_)
       return;
 
@@ -309,7 +310,7 @@ class BufferT {
     std::memcpy(new_data.get(), data_.get(), size_ * sizeof(T));
     data_ = std::move(new_data);
     capacity_ = new_capacity;
-    DCHECK(IsConsistent());
+    MPR_DCHECK(IsConsistent());
   }
 
   // Precondition for all methods except Clear and the destructor.
