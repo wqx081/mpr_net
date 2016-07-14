@@ -13,6 +13,7 @@ class TimeoutManager {
     INTERNAL,
     NORMAL
   };
+
   virtual ~TimeoutManager() {}
 
   virtual void AttachTimeoutManager(AsyncTimeout* obj,

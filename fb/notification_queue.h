@@ -13,8 +13,14 @@
 #include <unistd.h>
 #include <sys/eventfd.h>
 
+#include <sys/syscall.h>
 #include <glog/logging.h>
 #include <deque>
+
+// GLIBC_2_9
+#ifndef __NR_eventfd2
+#define __NR_eventfd2 290
+#endif
 
 namespace fb {
 
@@ -27,6 +33,8 @@ enum {
 #define EFD_NONBLOCK EFD_NONBLOCK
 };
 
+#define eventfd(initval, flags) syscall(__NR_eventfd2, (initval), (flags))
+
 template<typename MESSAGE>
 class NotificationQueue {
  public:
@@ -35,14 +43,14 @@ class NotificationQueue {
     enum : uint16_t { kDefaultMaxReadAtOnce = 10 };
 
     Consumer() : queue_(nullptr),
-	         destroyed_flag_ptr_(nullptr),
-		 max_read_at_once_(kDefaultMaxReadAtOnce) {}
+	             destroyed_flag_ptr_(nullptr),
+		         max_read_at_once_(kDefaultMaxReadAtOnce) {}
     virtual ~Consumer();
 
     virtual void MessageAvailable(MESSAGE&& message) = 0;
 
     void StartConsuming(EventBase* event_base,
-		        NotificationQueue* queue) {
+		                NotificationQueue* queue) {
       Init(event_base, queue);
       RegisterHandler(READ | PERSIST);
     }
@@ -80,7 +88,7 @@ class NotificationQueue {
     void SetActive(bool active, bool shuld_lock=false) {
       if (!queue_) {
         active_ = active;
-	return;
+        return;
       }
       if (shuld_lock) {
         queue_->spin_lock_.lock();
@@ -119,34 +127,40 @@ class NotificationQueue {
 	queue_() {
 
     RequestContext::GetStaticContext();
+
     if (fd_type == FdType::EVENTFD) {
-      eventfd_ = eventfd(0, EFD_CLOEXEC |
-		            EFD_NONBLOCK |
-			    EFD_SEMAPHORE);
+      eventfd_ = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE);
       if (eventfd_ == -1) {
         if (errno == ENOSYS || errno == EINVAL) {
-	  LOG(ERROR) << "..........";
-
-	  fd_type = FdType::PIPE;
-	} else {
-	  // throw;
-	}
+          // eventfd not availalble
+          LOG(ERROR) << "failed to create eventfd for NotificationQueue: "
+                     << errno << ", falling back to pipe mode (is your kernel "
+                     << "> 2.6.30?)";
+          fd_type = FdType::PIPE;
+        } else {
+          // some other error
+          LOG(ERROR) << "Failed to create eventfd for " "NotificationQueue";
+        }
       }
     }
 
     if (fd_type == FdType::PIPE) {
       if (pipe(pipe_fds_)) {
-        ;//throw()
+        LOG(ERROR) << "Failed to create pipe for NotificationQueue";
       }
+
       try {
-        //TODO:
-	fcntl(pipe_fds_[0], F_SETFL, O_RDONLY | O_NONBLOCK);
-	fcntl(pipe_fds_[0], F_SETFL, O_WRONLY | O_NONBLOCK);
+	    if (fcntl(pipe_fds_[0], F_SETFL, O_RDONLY | O_NONBLOCK) != 0) {
+          LOG(ERROR) << "Failed to put NotificationQueue pipe read endpoint into non-blocking mode";
+        }
+	    if (fcntl(pipe_fds_[0], F_SETFL, O_WRONLY | O_NONBLOCK) != 0) {
+          LOG(ERROR) << "Failed to put NotificationQueue pipe write endpoint into non-blocking mode";
+        }
 
       } catch (...) {
         ::close(pipe_fds_[0]);
         ::close(pipe_fds_[1]);
-	throw;
+	    throw;
       }
     }
   }
@@ -179,8 +193,7 @@ class NotificationQueue {
   }
 
   bool TryPutMessageNoThrow(MESSAGE&& message) {
-    return PutMessageImpl(std::move(message), advisory_max_queue_size_,
-		          false);
+    return PutMessageImpl(std::move(message), advisory_max_queue_size_, false);
   }
 
   bool TryPutMessageNoThrow(const MESSAGE& message) {
@@ -235,9 +248,9 @@ class NotificationQueue {
  private:
   inline bool CheckQueueSize(size_t max_size, bool throws=true) const {
     DCHECK(0 == spin_lock_.trylock());
-    if (max_size > 0 && queue_.Size() >= max_size) {
+    if (max_size > 0 && queue_.size() >= max_size) {
       if (throws) {
-      ; //
+        LOG(ERROR) << "Unable to add message to NotificationQueue: queue is full";
       }
       return false;
     }
@@ -246,7 +259,7 @@ class NotificationQueue {
 
   inline bool CheckDraining(bool throws=true) {
     if (MPR_UNLIKELY(draining_ && throws)) {
-    
+      LOG(ERROR) << "Queue is draining, cannot add message";
     }
     return draining_;
   }
@@ -265,18 +278,17 @@ class NotificationQueue {
     } else {
       bytes_expected = num_added;
       do {
-        size_t message_size = std::min(num_added,
-			               sizeof(kPipeMessage));
-	ssize_t rc = ::write(pipe_fds_[1], kPipeMessage, message_size);
-	if (rc < 0) {
-	  break;
-	}
-	num_added -= rc;
-	bytes_written += rc;
+        size_t message_size = std::min(num_added, sizeof(kPipeMessage));
+	    ssize_t rc = ::write(pipe_fds_[1], kPipeMessage, message_size);
+	    if (rc < 0) {
+	      break;
+	    }
+	    num_added -= rc;
+	    bytes_written += rc;
       } while (num_added > 0);
     }
     if (bytes_written != bytes_expected) {
-      ;//throw
+      LOG(ERROR) << "Failed to signal NotificationQueue after write";
     }
   }
 
@@ -312,8 +324,7 @@ class NotificationQueue {
       if (num_active_consumers_ < num_consumers_) {
         signal = true;
       }
-      queue_.emplace_back(std::move(message),
-		          RequestContext::SaveContext());
+      queue_.emplace_back(std::move(message), RequestContext::SaveContext());
     }
     if (signal) {
       SignalEvent();
@@ -322,14 +333,13 @@ class NotificationQueue {
   }
 
   bool PutMessageImpl(const MESSAGE& message, 
-		      size_t max_size, 
-		      bool throws=true) {
+		              size_t max_size, 
+		              bool throws=true) {
     CheckPid();
     bool signal = false;
     {
       SpinLockGuard g(spin_lock_);
-      if (CheckDraining(throws) ||
-          !CheckQueueSize(max_size, throws)) {
+      if (CheckDraining(throws) || !CheckQueueSize(max_size, throws)) {
         return false;
       }
       if (num_active_consumers_ < num_consumers_) {
@@ -355,8 +365,8 @@ class NotificationQueue {
       CheckDraining();
       while (first != last) {
         queue_.emplace_back(*first, RequestContext::SaveContext());
-	++first;
-	++num_added;
+	    ++first;
+	    ++num_added;
       }
       if (num_active_consumers_ < num_consumers_) {
         signal = true;
@@ -390,16 +400,14 @@ NotificationQueue<MESSAGE>::Consumer::~Consumer() {
 }
 
 template<typename MESSAGE>
-void 
-NotificationQueue<MESSAGE>::Consumer::HandlerReady(uint16_t events) noexcept {
+void NotificationQueue<MESSAGE>::Consumer::HandlerReady(uint16_t events) noexcept {
   (void) events;
   ConsumeMessages(false);
 }
 
 
 template<typename MESSAGE>
-void NotificationQueue<MESSAGE>::Consumer::ConsumeMessages(bool is_drain)
-	noexcept {
+void NotificationQueue<MESSAGE>::Consumer::ConsumeMessages(bool is_drain) noexcept {
   uint32_t num_processed = 0;
   bool first_run = true;
   SetActive(true);
@@ -419,7 +427,7 @@ void NotificationQueue<MESSAGE>::Consumer::ConsumeMessages(bool is_drain)
       if (MPR_UNLIKELY(queue_->queue_.empty())) {
         SetActive(false);
         queue_->spin_lock_.unlock();
-	return;
+	    return;
       }
 
       auto& data = queue_->queue_.front();
@@ -438,9 +446,10 @@ void NotificationQueue<MESSAGE>::Consumer::ConsumeMessages(bool is_drain)
 
       bool callback_destroyed = false;
       DCHECK(destroyed_flag_ptr_ == nullptr);
+      destroyed_flag_ptr_ = &callback_destroyed;
       MessageAvailable(std::move(msg));
 
-      RequestContext::SaveContext(old_ctx);
+      RequestContext::SetContext(old_ctx);
 
       if (callback_destroyed) {
         return;
@@ -455,7 +464,7 @@ void NotificationQueue<MESSAGE>::Consumer::ConsumeMessages(bool is_drain)
       if (!is_drain && max_read_at_once_ > 0 &&
 	  num_processed >= max_read_at_once_) {
         queue_->SignalEvent(1);
-	return;
+	    return;
       }
 
       if (was_empty) {
@@ -464,11 +473,10 @@ void NotificationQueue<MESSAGE>::Consumer::ConsumeMessages(bool is_drain)
     } catch (const std::exception& ex) {
       if (locked) {
         queue_->spin_lock_.unlock();
-	if (!is_drain) {
-	  queue_->SignalEvent(1);
-	}
+	    if (!is_drain) {
+	      queue_->SignalEvent(1);
+	    }
       } 
-
       return;
     }
   }
@@ -478,13 +486,16 @@ template<typename MESSAGE>
 void NotificationQueue<MESSAGE>::Consumer::Init(
 		EventBase* event_base,
 		NotificationQueue* queue) {
-  assert(event_base->IsInEventBaseThread());
-  assert(queue == nullptr);
+  //TODO(wqx):
+  //assert(event_base->IsInEventBaseThread());
+  assert(queue_ == nullptr);
   assert(!IsHandlerRegistered());
-
   queue->CheckPid();
+
   base_ = event_base;
+
   queue_ = queue;
+
   {
     SpinLockGuard g(queue_->spin_lock_);
     queue_->num_consumers_++;
@@ -535,4 +546,5 @@ bool NotificationQueue<MESSAGE>::Consumer::ConsumeUntilDrained() noexcept {
 }
 
 } // namespace fb
+
 #endif // FB_NOTIFICATION_QUEUE_H_

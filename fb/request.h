@@ -1,5 +1,7 @@
 #ifndef FB_REQUEST_H_
 #define FB_REQUEST_H_
+
+#include "fb/thread_local.h"
 #include "fb/rw_spin_lock.h"
 
 #include <map>
@@ -79,9 +81,8 @@ class RequestContext {
   }
 
   static std::shared_ptr<RequestContext>& GetStaticContext() {
-    //TODO
-    static thread_local std::shared_ptr<RequestContext> context;
-    return context;
+    static fb::ThreadLocal<std::shared_ptr<RequestContext> > context;
+    return *context;
   }
 
  private:

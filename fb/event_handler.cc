@@ -1,11 +1,14 @@
-#include "fb/event_handler.h"
 #include "fb/event_base.h"
+#include "fb/event_handler.h"
 
 #include <assert.h>
 
 namespace fb {
 
 EventHandler::EventHandler(EventBase* event_base, int fd) {
+
+  LOG(INFO) << "fd----: " << fd;
+
   event_set(&event_, fd, 0, &EventHandler::LibeventCallback, this);
   if (event_base != nullptr) {
     SetEventBase(event_base);
@@ -29,6 +32,7 @@ bool EventHandler::RegisterImpl(uint16_t events, bool internal) {
     }
     event_del(&event_);
   }
+
   struct event_base* evb = event_.ev_base;
   event_set(&event_,
             event_.ev_fd,
@@ -42,7 +46,8 @@ bool EventHandler::RegisterImpl(uint16_t events, bool internal) {
   }
 
   if (event_add(&event_, nullptr) < 0) {
-    LOG(ERROR) << "xxxxxxxxxxx";
+   LOG(ERROR) << "EventBase: failed to register event handler for fd "
+              << event_.ev_fd << ": " << strerror(errno);
 
     event_del(&event_);
     return false;
@@ -59,7 +64,7 @@ void EventHandler::UnregisterHandler() {
 void EventHandler::AttachEventBase(EventBase* event_base) {
   assert(event_.ev_base == nullptr);
   assert(!IsHandlerRegistered());
-  assert(event_base->IsInEventThread());
+  assert(event_base->IsInEventBaseThread());
 
   SetEventBase(event_base);
 }

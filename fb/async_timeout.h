@@ -1,5 +1,6 @@
 #ifndef FB_ASYNC_TIMEOUT_H_
 #define FB_ASYNC_TIMEOUT_H_
+
 #include "base/macros.h"
 #include "fb/timeout_manager.h"
 
@@ -29,7 +30,7 @@ class AsyncTimeout {
   bool ScheduleTimeout(uint32_t milliseconds); 
   bool ScheduleTimeout(std::chrono::milliseconds timeout);
 
-  void CancelTiemout();
+  void CancelTimeout();
   bool IsScheduled() const;
   
   void AttachTimeoutManager(TimeoutManager* timeout_manager,
@@ -52,6 +53,7 @@ class AsyncTimeout {
   static void LibeventCallback(int fd, short events, void* arg);
   struct event event_;
   TimeoutManager* timeout_manager_;
+  std::shared_ptr<RequestContext> context_;
 
   DISALLOW_COPY_AND_ASSIGN(AsyncTimeout);
 };

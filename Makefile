@@ -1,15 +1,15 @@
 CXXFLAGS += -I./
 CXXFLAGS += -std=c++11 -Wall -g -c -o
 
-LIB_FILES := -lglog -lgflags -L/usr/local/lib -lgtest -lgtest_main -lpthread
+LIB_FILES := -levent -lglog -lgflags -L/usr/local/lib -lgtest -lgtest_main -lpthread
 
-CPP_SOURCES :=  \
+#CPP_SOURCES :=  \
 	./base/critical_section.cc \
 	./base/location.cc \
 	./base/timeutils.cc \
 	\
 	\
-	./net/ipaddress.cc \
+	./net/ip_address.cc \
 	./net/socket_address.cc \
 	./net/sigslot.cc \
 	./net/async_socket.cc \
@@ -51,7 +51,26 @@ CPP_SOURCES :=  \
 	\
 	\
 	\
+	./fb/event_base.cc \
 	./fb/request.cc \
+	./fb/event_handler.cc \
+	./fb/async_timeout.cc \
+	\
+	\
+	./fb/test/socket_pair.cc \
+	./fb/test/time_util.cc \
+
+CPP_SOURCES := ./fb/event_base.cc \
+	./fb/request.cc \
+	./fb/event_handler.cc \
+	./fb/async_timeout.cc \
+	./fb/shutdown_socket_set.cc \
+	./fb/io_buffer.cc \
+	\
+	\
+	./fb/test/socket_pair.cc \
+	./fb/test/time_util.cc \
+
 
 CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 
@@ -60,7 +79,7 @@ CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 	./base/thread_unittest \
 	./base/worker_thread_unittest \
 
-TESTS := \
+#TESTS := \
 	./base/stl_util_unittest \
 	./net/message_queue_unittest \
 	./http/http_server_unittest \
@@ -68,7 +87,16 @@ TESTS := \
 	./fb/scope_guard_unittest \
 	./fb/small_locks_unittest \
 	./fb/spin_lock_unittest \
+	\
+	./fb/event_base_unittest \
 
+TESTS := ./fb/rw_spin_lock_unittest \
+	./fb/scope_guard_unittest \
+	./fb/small_locks_unittest \
+	./fb/spin_lock_unittest \
+	./fb/event_base_unittest \
+	./fb/thread_local_unittest \
+	./fb/io_buffer_unittest \
 
 all: $(CPP_OBJECTS) $(TESTS)
 .cc.o:
@@ -109,6 +137,21 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./fb/spin_lock_unittest: ./fb/spin_lock_unittest.o
 	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
 ./fb/spin_lock_unittest.o: ./fb/spin_lock_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/event_base_unittest: ./fb/event_base_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/event_base_unittest.o: ./fb/event_base_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/thread_local_unittest: ./fb/thread_local_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/thread_local_unittest.o: ./fb/thread_local_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/io_buffer_unittest: ./fb/io_buffer_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/io_buffer_unittest.o: ./fb/io_buffer_unittest.cc
 	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
 
 clean:

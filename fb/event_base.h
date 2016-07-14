@@ -189,6 +189,9 @@ class EventBase : public TimeoutManager,
 
     void SetTimeInterval(uint64_t time_interval);
     void Reset(double value = 0.0);
+
+    void AddSample(int64_t idle, int64_t busy);
+
     double Get() const { return value_; }
     void Dampen(double factor)  { value_ *= factor; }
 
@@ -275,6 +278,7 @@ class EventBase : public TimeoutManager,
   void InitNotificationQueue();
   
   CobTimeout::List pending_cob_timeouts_;
+
   LoopCallbackList loop_callbacks_;
   LoopCallbackList run_before_loop_callbacks_;
   LoopCallbackList on_destruction_callbacks_;
