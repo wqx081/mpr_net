@@ -1,9 +1,8 @@
-//#include "fb/async_socket.h"
+#include "fb/async_socket.h"
 #include "fb/event_base.h"
-//#include "fb/async_socket.h"
 #include "net/socket_address.h"
 #include "fb/io_buffer.h"
-#include "fb/async_socket.h"
+#include "fb/async_transport.h"
 
 #include <poll.h>
 #include <errno.h>
@@ -22,7 +21,6 @@ namespace fb {
 
 const AsyncSocket::OptionMap AsyncSocket::empty_option_map;
 
-#if 0
 class AsyncSocket::WriteRequest {
  public:
   static WriteRequest* NewRequest(WriteCallback* callback,
@@ -31,7 +29,7 @@ class AsyncSocket::WriteRequest {
                                   unique_ptr<IOBuffer>&& io_buffer,
                                   WriteFlags flags) {
     assert(op_count > 0);
-    void* buf = malloc(sizeof(WriteRequest) + (op_count * sizeof(struct iovec));
+    void* buf = malloc(sizeof(WriteRequest) + (op_count * sizeof(struct iovec)));
 
     if (buf == nullptr) {
       throw std::bad_alloc();
@@ -126,16 +124,15 @@ class AsyncSocket::WriteRequest {
 AsyncSocket::AsyncSocket()
     : event_base_(nullptr),
       write_timeout_(this, nullptr),
-      io_handle_(this, nullptr) {
+      io_handler_(this, nullptr) {
   Init();
 }
 
 AsyncSocket::AsyncSocket(EventBase* evb)
       : event_base_(evb),
         write_timeout_(this, evb),
-        io_handle_(this, evb) {
+        io_handler_(this, evb) {
   Init();
 }
 
-#endif
 } // namespace fb
