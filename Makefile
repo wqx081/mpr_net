@@ -64,6 +64,7 @@ CPP_SOURCES := ./fb/event_base.cc \
 	./fb/request.cc \
 	./fb/event_handler.cc \
 	./fb/async_timeout.cc \
+	./fb/async_socket.cc \
 	./fb/shutdown_socket_set.cc \
 	./fb/io_buffer.cc \
 	\
