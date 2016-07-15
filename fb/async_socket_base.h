@@ -1,5 +1,5 @@
-#ifndef FB_ASYNC_SOCKET_H_
-#define FB_ASYNC_SOCKET_H_
+#ifndef FB_ASYNC_SOCKET_BASE_H_
+#define FB_ASYNC_SOCKET_BASE_H_
 #include "net/socket_address.h"
 #include "fb/event_base.h"
 
@@ -13,4 +13,4 @@ class AsyncSocketBase {
 };
 
 } // namespace fb
-#endif // FB_ASYNC_SOCKET_H_
+#endif // FB_ASYNC_SOCKET_BASE_H_

@@ -5,6 +5,9 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <stdint.h>
+#include <type_traits>
+#include <memory>
+#include <glog/logging.h>
 
 #define OFFSET_OF(type, field) \
   (reinterpret_cast<intptr_t>(&(reinterpret_cast<type*>(16)->field)) - 16)
@@ -62,6 +65,59 @@ struct MaxAlign { char c; } __attribute__((__aligned__));
 #define FB_PACK_PUSH /**/
 #define FB_PACK_POP /**/
 
+inline size_t GoodMallocSize(size_t min_size) noexcept {
+  return min_size;
+}
 
+template<typename T, typename Dp=std::default_delete<T>, typename... Args>
+typename std::enable_if<!std::is_array<T>::value, std::unique_ptr<T, Dp>>::type
+make_unique(Args&&... args) {
+  return std::unique_ptr<T, Dp>(new T(std::forward<Args>(args)...));
+}
+
+template<typename T, typename Dp = std::default_delete<T>>
+typename std::enable_if<std::is_array<T>::value, std::unique_ptr<T, Dp>>::type
+make_unique(const size_t n) {
+  return std::unique_ptr<T, Dp>(new typename std::remove_extent<T>::type[n]());
+}
+
+template<typename T, typename Dp = std::default_delete<T>, typename... Args>
+typename std::enable_if<std::extent<T>::value != 0, std::unique_ptr<T, Dp>>::type
+make_unique(Args&&...) = delete;
+
+
+
+#define FOR_EACH(i, c)                              \
+  if (bool FOR_EACH_state1 = false) {} else         \
+    for (auto && FOR_EACH_state2 = (c);             \
+         !FOR_EACH_state1; FOR_EACH_state1 = true)  \
+      for (auto i = FOR_EACH_state2.begin();        \
+           i != FOR_EACH_state2.end(); ++i)
+  
+
+  template <class T, class U>
+  typename std::enable_if<
+    (std::is_arithmetic<T>::value && std::is_arithmetic<U>::value) ||
+    (std::is_pointer<T>::value && std::is_pointer<U>::value),
+    bool>::type
+  NotThereYet(T& iter, const U& end) {
+    return iter < end;
+  }
+  
+  template <class T, class U>
+  typename std::enable_if<
+    !(
+      (std::is_arithmetic<T>::value && std::is_arithmetic<U>::value) ||
+      (std::is_pointer<T>::value && std::is_pointer<U>::value)
+    ),
+    bool>::type
+  NotThereYet(T& iter, const U& end) {
+    return iter != end;
+  }
+
+#define FOR_EACH_RANGE(i, begin, end)                      \
+    for (auto i = (true ? (begin) : (end));                \
+                  NotThereYet(i, (end));                   \
+                  ++i)
 
 #endif // BASE_MACROS_H_

@@ -3,12 +3,13 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include "net/socket_address.h"
-
+#include "fb/shutdown_socket_set.h"
+#include "fb/io_buffer.h"
 #include "fb/async_timeout.h"
+#include "fb/async_socket_exception.h"
 #include "fb/async_transport.h"
 #include "fb/event_handler.h"
 #include "fb/delayed_destruction.h"
-#include "fb/shutdown_socket_set.h"
 
 #include <memory>
 #include <map>
@@ -23,12 +24,13 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
    public:
     virtual ~ConnectCallback() {}
     virtual void ConnectSuccess() noexcept = 0;
-    //TODO:
-//  virtual void ConnectError(const AsyncSocketException& ex);
+    virtual void ConnectError(const AsyncSocketException& ex) noexcept = 0;
   };
+
   explicit AsyncSocket();
   explicit AsyncSocket(EventBase* event_base);
-  
+  void SetShudownSocketSet(ShutdownSocketSet* ss);
+
   AsyncSocket(EventBase* event_base,
               const net::SocketAddress& address,
               uint32_t connect_timeout = 0);
@@ -61,9 +63,21 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   virtual int GetFd() const { return fd_; }
   virtual int DetachFd();
   class OptionKey {
+   public:
+    bool operator<(const OptionKey& other) const {
+      if (level == other.level) {
+        return optname < other.optname;
+      }
+      return level < other.level;
+    }
+    int Apply(int fd, int val) const {
+      return setsockopt(fd, level, optname, &val, sizeof(val));
+    }
+
+    int level;
+    int optname;
   };
   typedef std::map<OptionKey, int> OptionMap;
-  
   static const OptionMap empty_option_map;
   static const net::SocketAddress& AnyAddress();
   
@@ -71,20 +85,28 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
                        const net::SocketAddress& address,
                        int timeout = 0,
                        const OptionMap& options = empty_option_map,
-                       const net::SocketAddress& bind_address = AnyAddress());
+                       const net::SocketAddress& bind_address = AnyAddress()) noexcept;
   virtual void Connect(ConnectCallback* callback,
                        const std::string& ip,
                        uint16_t port,
                        int timeout = 00,
                        const OptionMap& options = empty_option_map) noexcept;
+
   void CancelConnect();
   void SetSendTimeout(uint32_t milliseconds) override;
-  uint32_t GetSendTimeout() const override;
-  void SetMaxReadsPerEvent(uint16_t max_reads);
-  uint16_t GetMaxReadsPerEvent() const;
+  uint32_t GetSendTimeout() const override {
+    return send_timeout_;
+  }
+
+  void SetMaxReadsPerEvent(uint16_t max_reads) {
+    max_reads_per_event_ = max_reads;
+  }
+  uint16_t GetMaxReadsPerEvent() const {
+    return max_reads_per_event_;
+  }
 
   void SetReadCB(ReadCallback* callback) override;
-  ReadCallback* GetReadCallback() const override;
+  ReadCallback* GetReadCB() const override;
 
   void Write(WriteCallback* callback,
              const void* buf,
@@ -94,6 +116,9 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
               const iovec* vec,
               size_t count,
               WriteFlags flags = WriteFlags::NONE) override;
+  void WriteChain(WriteCallback* callback,
+                  std::unique_ptr<IOBuffer>&& buf,
+                  WriteFlags flags=WriteFlags::NONE) override;
   
   // AsyncTransport
   void Close() override;
@@ -111,16 +136,34 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   void DetachEventBase() override;
   bool IsDetachable() const override;
 
-  virtual GetLocalAddress(net::SocketAddress* address) const override;
-  virtual GetPeerAddress(net::SocketAddress* address) const override;
+  virtual void GetLocalAddress(net::SocketAddress* address) const override;
+  virtual void GetPeerAddress(net::SocketAddress* address) const override;
 
-  bool IsEorTrackingEnable() const override;
+  bool IsEorTrackingEnabled() const override {
+    return false;
+  }
+
   void SetEorTracking(bool track) override;
-  bool Connecting() const override;
-  size_t GetAppBytesWritten() const override;
-  size_t GetRawBytesWritten() const override;
-  size_t GetAppBytesReceived() const override;
-  size_t GetRawBytesReceived() const override;
+
+  bool Connecting() const override {
+    return (state_ == StateEnum::CONNECTING);
+  }
+
+  size_t GetAppBytesWritten() const override {
+    return app_bytes_written_;
+  }
+
+  size_t GetRawBytesWritten() const override {
+    return GetAppBytesWritten();
+  }
+
+  size_t GetAppBytesReceived() const override {
+    return app_bytes_received_;
+  }
+
+  size_t GetRawBytesReceived() const override {
+    return GetAppBytesReceived();
+  }
   
   int SetNoDelay(bool no_delay);
   void SetCloseOnExec();
@@ -208,9 +251,21 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   void TimeoutExpired() noexcept;
 
   virtual ssize_t PerformRead(void* buf, size_t buflen);
-  //TODO
-  virtual ssize_t PerformWrite(const iovec* vec, uint32_t count,
-                               WriteFlags flags, uint32_t* count_written,
+  void WriteChainImpl(WriteCallback* callback,
+                      iovec* vec,
+                      size_t count,
+                      std::unique_ptr<IOBuffer>&& buf,
+                      WriteFlags flags);
+  void WriteImpl(WriteCallback* callback,
+                 const iovec* vec,
+                 size_t count,
+                 std::unique_ptr<IOBuffer>&& buf,
+                 WriteFlags flags = WriteFlags::NONE);
+  
+  virtual ssize_t PerformWrite(const iovec* vec, 
+                               uint32_t count,
+                               WriteFlags flags, 
+                               uint32_t* count_written,
                                uint32_t* partial_written);
   
   bool UpdateEventRegistration();
@@ -221,7 +276,20 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   // Error Handling methods
   void StartFail();
   void FinishFail();
-//  void Fail(const char* fn, AsyncSocketException& ex);
+  void Fail(const char* fn, const AsyncSocketException& ex);
+  void FailConnect(const char* fn, const AsyncSocketException& ex);
+  void FailRead(const char* fn, const AsyncSocketException& ex);
+  void FailWrite(const char* fn,
+                 WriteCallback* callback,
+                 size_t bytes_written,
+                 const AsyncSocketException& ex);
+  void FailWrite(const char* fn, const AsyncSocketException& ex);
+  void FailAllWrites(const AsyncSocketException& ex);
+  void InvalidState(ConnectCallback* callback);
+  void InvalidState(ReadCallback* callback);
+  void InvalidState(WriteCallback* callback);
+
+  std::string WithAddress(const std::string& s);
   
   StateEnum state_;
   uint8_t shutdown_flags_;
@@ -232,16 +300,17 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   uint16_t max_reads_per_event_;
   EventBase* event_base_;
   WriteTimeout write_timeout_;
-  ioHandler io_handler_;
+  IoHandler io_handler_;
 
   ConnectCallback* connect_callback_;
   ReadCallback* read_callback_;
   WriteRequest* write_request_head_;
   WriteRequest* write_request_tail_;
-  ShutdownSocket* shutdown_socket_set_;
+  ShutdownSocketSet* shutdown_socket_set_;
   size_t app_bytes_received_;
   size_t app_bytes_written_;
 };
 
 } // namespace fb
+
 #endif // FB_ASYNC_SOCKET_H_

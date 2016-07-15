@@ -36,7 +36,7 @@ class DelayedDestruction {
     }
 
     ~DestructorGuard() {
-      assert(dd_->guard_ount_ > 0);
+      assert(dd_->guard_count_ > 0);
       --dd_->guard_count_;
       if (dd_->guard_count_ == 0 && dd_->destroy_pending_) {
         dd_->destroy_pending_ = false;

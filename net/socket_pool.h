@@ -1,23 +1,9 @@
-/*
- *  Copyright 2004 The WebRTC Project Authors. All rights reserved.
- *
- *  Use of this source code is governed by a BSD-style license
- *  that can be found in the LICENSE file in the root of the source
- *  tree. An additional intellectual property rights grant can be found
- *  in the file PATENTS.  All contributing project authors may
- *  be found in the AUTHORS file in the root of the source tree.
- */
-
 #ifndef WEBRTC_BASE_SOCKETPOOL_H_
 #define WEBRTC_BASE_SOCKETPOOL_H_
 
 #include <deque>
 #include <list>
-#if 0
-#include "webrtc/base/logging.h"
-#include "webrtc/base/sigslot.h"
-#include "webrtc/base/socketaddress.h"
-#endif
+
 #include "net/logging.h"
 #include "net/sigslot.h"
 #include "net/socket_address.h"

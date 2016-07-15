@@ -3,15 +3,16 @@
 #include <memory>
 #include <sys/uio.h>
 
+#include "net/socket_address.h"
 #include "fb/delayed_destruction.h"
-#include "fb/event_base.h"
 #include "fb/async_socket_base.h"
+#include "fb/event_base.h"
 
 namespace fb {
 
+class AsyncSocketException;
 class EventBase;
 class IOBuffer;
-class SocketAddress;
 
 
 enum class WriteFlags : uint32_t {
@@ -20,7 +21,30 @@ enum class WriteFlags : uint32_t {
   EOR = 0x02,
 };
 
-class AsyncTransport : public DelayedDestruction,
+  
+inline WriteFlags operator|(WriteFlags a, WriteFlags b) {
+  return static_cast<WriteFlags>(
+      static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
+  
+inline WriteFlags operator&(WriteFlags a, WriteFlags b) {
+  return static_cast<WriteFlags>(
+      static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+}
+  
+inline WriteFlags operator~(WriteFlags a) {
+  return static_cast<WriteFlags>(~static_cast<uint32_t>(a));
+}
+  
+inline WriteFlags unSet(WriteFlags a, WriteFlags b) {
+  return a & ~b;
+}
+  
+inline bool isSet(WriteFlags a, WriteFlags b) {
+  return (a & b) == b;
+}
+
+class AsyncTransport : public DelayedDestruction , 
                        public AsyncSocketBase {
  public:
   typedef std::unique_ptr<AsyncTransport, Destructor> UniquePtr;
@@ -32,7 +56,10 @@ class AsyncTransport : public DelayedDestruction,
   virtual void ShutdownWriteNow() = 0;
   virtual bool Good() const = 0;
   virtual bool Readable() const = 0;
-  virtual bool IsPending() const;
+  virtual bool IsPending() const {
+    return Readable();
+  }
+
   virtual bool Connecting() const = 0;
   virtual bool Error() const = 0;
   virtual void AttachEventBase(EventBase* event_base) = 0;
@@ -40,9 +67,11 @@ class AsyncTransport : public DelayedDestruction,
   virtual bool IsDetachable() const = 0;
   virtual void SetSendTimeout(uint32_t milliseconds) = 0;
   virtual uint32_t GetSendTimeout() const = 0;
-  virtual void GetLocalAddress(SocketAddress* address) const = 0;
-  virtual void GetAddress(SocketAddress* address) const;
-  virtual void GetPeerAddress(SocketAddress* address) const = 0;
+  virtual void GetLocalAddress(net::SocketAddress* address) const = 0;
+  virtual void GetAddress(net::SocketAddress* address) const {
+    return GetLocalAddress(address);
+  }
+  virtual void GetPeerAddress(net::SocketAddress* address) const = 0;
   virtual bool IsEorTrackingEnabled() const = 0;
   virtual void SetEorTracking(bool track) = 0;
   
@@ -61,18 +90,17 @@ class AsyncTransportWrapper : virtual public AsyncTransport {
   class ReadCallback {
    public:
     virtual ~ReadCallback() {}
-    virtual void GetReadBuffer(void* buf_return, size_t* len_return) = 0;
+    virtual void GetReadBuffer(void** buf_return, size_t* len_return) = 0;
     virtual void ReadDataAvailable(size_t len) noexcept = 0;
     virtual void ReadEOF() noexcept = 0;
-    //TODO(wqx):
-    //virtual void ReadError(const AsyncSocketException& ex) noexcept = 0;
+    virtual void ReadError(const AsyncSocketException& ex) noexcept = 0;
   };
   class WriteCallback {
    public:
     virtual ~WriteCallback() {}
     virtual void WriteSuccess() noexcept = 0;
-    //TODO(wqx):
-    //virtual void WriteError(size_t bytes_written, const AsyncSocketException& e) noexcept = 0;
+    virtual void WriteError(size_t bytes_written, 
+                            const AsyncSocketException& e) noexcept = 0;
   };
 
   virtual void SetReadCB(ReadCallback* cb) = 0;
@@ -85,11 +113,9 @@ class AsyncTransportWrapper : virtual public AsyncTransport {
                       const iovec* vec,
                       size_t count,
                       WriteFlags flags = WriteFlags::NONE) = 0;
-  //TODO(wqx):
-  //
-  //virtual void WriteChain(WriteCallback* cb,
-  //                        std::unique_ptr<IOBuffer>&& buf,
-  //                        WriteFlags flags = WriteFlags::NONE) = 0;
+  virtual void WriteChain(WriteCallback* cb,
+                          std::unique_ptr<IOBuffer>&& buf,
+                          WriteFlags flags = WriteFlags::NONE) = 0;
 };
 
 } // namespace fb
