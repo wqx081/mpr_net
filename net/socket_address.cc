@@ -269,6 +269,16 @@ bool SocketAddress::FromSockAddr(const sockaddr_in& saddr) {
   return true;
 }
 
+//wqx
+void SocketAddress::SetFromLocalAddress(int socket) {
+  sockaddr_in tmp_sock;
+  socklen_t addr_len = sizeof(tmp_sock);
+  if (getsockname(socket, (sockaddr*)&tmp_sock, &addr_len) != 0) {
+    throw std::runtime_error("getsockname error");
+  }
+  FromSockAddr(tmp_sock);
+}
+
 static size_t ToSockAddrStorageHelper(sockaddr_storage* addr,
                                       IPAddress ip,
                                       uint16_t port,

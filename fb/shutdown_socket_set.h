@@ -8,6 +8,10 @@
 
 namespace fb {
 
+int CloseNoInt(int fd);
+int Dup2NoInt(int old_fd, int new_fd);
+int ShutdownNoInt(int fd, int how);
+
 class ShutdownSocketSet {
  public:
   class File {

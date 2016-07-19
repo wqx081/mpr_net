@@ -110,6 +110,7 @@ class SocketAddress {
   // Same as ToString but anonymizes it by hiding the last part.
   std::string ToSensitiveString() const;
 
+  
   // Parses hostname:port and [hostname]:port.
   bool FromString(const std::string& str);
 
@@ -166,6 +167,8 @@ class SocketAddress {
   // written to the sockaddr_storage, or zero on failure.
   size_t ToDualStackSockAddrStorage(sockaddr_storage* saddr) const;
   size_t ToSockAddrStorage(sockaddr_storage* saddr) const;
+
+  void SetFromLocalAddress(int socket);
 
  private:
   std::string hostname_;

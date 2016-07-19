@@ -1,32 +1,32 @@
 #include "fb/shutdown_socket_set.h"
-#include <sys/socket.h>
-#include <sys/types.h>
 
 #include <chrono>
 #include <thread>
 
+
 #include <glog/logging.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-
-namespace {
+namespace fb {
 
 template<typename F, typename... Args>
 ssize_t WrapNoInt(F f, Args... args) {
   ssize_t r;
   do {
-    r = f(args...);  
+    r = f(args...);
   } while (r == -1 && errno == EINTR);
   return r;
 }
 
-
 inline void* CheckedCalloc(size_t n, size_t size) {
   void* p = calloc(n, size);
   if (!p) {
-    std::__throw_bad_alloc();
-  }
+               std::__throw_bad_alloc();
+             }
   return p;
 }
 
@@ -37,19 +37,14 @@ int CloseNoInt(int fd) {
   }
   return r;
 }
-
+              
 int Dup2NoInt(int old_fd, int new_fd) {
   return WrapNoInt(dup2, old_fd, new_fd);
-}
-
+}                     
+                      
 int ShutdownNoInt(int fd, int how) {
   return WrapNoInt(shutdown, fd, how);
-}
-
-
-} // namespace
-
-namespace fb {
+}         
 
 ShutdownSocketSet::ShutdownSocketSet(size_t max_fd)
     : max_fd_(max_fd),

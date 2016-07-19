@@ -65,6 +65,7 @@ CPP_SOURCES := ./fb/event_base.cc \
 	./fb/event_handler.cc \
 	./fb/async_timeout.cc \
 	./fb/async_socket.cc \
+	./fb/async_server_socket.cc \
 	./fb/shutdown_socket_set.cc \
 	./fb/io_buffer.cc \
 	\
@@ -80,21 +81,6 @@ CPP_SOURCES := ./fb/event_base.cc \
 CPP_OBJECTS := $(CPP_SOURCES:.cc=.o)
 
 
-#TESTS := ./base/once_unittest \
-	./base/thread_unittest \
-	./base/worker_thread_unittest \
-
-#TESTS := \
-	./base/stl_util_unittest \
-	./net/message_queue_unittest \
-	./http/http_server_unittest \
-	./fb/rw_spin_lock_unittest \
-	./fb/scope_guard_unittest \
-	./fb/small_locks_unittest \
-	./fb/spin_lock_unittest \
-	\
-	./fb/event_base_unittest \
-
 TESTS := ./fb/rw_spin_lock_unittest \
 	./fb/scope_guard_unittest \
 	./fb/small_locks_unittest \
@@ -102,6 +88,7 @@ TESTS := ./fb/rw_spin_lock_unittest \
 	./fb/event_base_unittest \
 	./fb/thread_local_unittest \
 	./fb/io_buffer_unittest \
+	./fb/async_socket_unittest \
 
 all: $(CPP_OBJECTS) $(TESTS)
 .cc.o:
@@ -157,6 +144,11 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./fb/io_buffer_unittest: ./fb/io_buffer_unittest.o
 	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
 ./fb/io_buffer_unittest.o: ./fb/io_buffer_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/async_socket_unittest: ./fb/async_socket_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/async_socket_unittest.o: ./fb/async_socket_unittest.cc
 	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
 
 clean:
