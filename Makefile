@@ -69,6 +69,10 @@ CPP_SOURCES := ./fb/event_base.cc \
 	./fb/io_buffer.cc \
 	\
 	\
+	./net/ip_address.cc \
+	./net/socket_address.cc \
+	\
+	\
 	./fb/test/socket_pair.cc \
 	./fb/test/time_util.cc \
 

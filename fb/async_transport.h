@@ -36,11 +36,11 @@ inline WriteFlags operator~(WriteFlags a) {
   return static_cast<WriteFlags>(~static_cast<uint32_t>(a));
 }
   
-inline WriteFlags unSet(WriteFlags a, WriteFlags b) {
+inline WriteFlags UnSet(WriteFlags a, WriteFlags b) {
   return a & ~b;
 }
   
-inline bool isSet(WriteFlags a, WriteFlags b) {
+inline bool IsSet(WriteFlags a, WriteFlags b) {
   return (a & b) == b;
 }
 
@@ -51,7 +51,10 @@ class AsyncTransport : public DelayedDestruction ,
   
   virtual void Close() = 0;
   virtual void CloseNow() = 0;
-  virtual void CloseWithReset();
+  virtual void CloseWithReset() {
+    CloseNow();
+  }
+
   virtual void ShutdownWrite() =0;
   virtual void ShutdownWriteNow() = 0;
   virtual bool Good() const = 0;

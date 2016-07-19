@@ -89,7 +89,7 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   virtual void Connect(ConnectCallback* callback,
                        const std::string& ip,
                        uint16_t port,
-                       int timeout = 00,
+                       int timeout = 0,
                        const OptionMap& options = empty_option_map) noexcept;
 
   void CancelConnect();
@@ -143,7 +143,9 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
     return false;
   }
 
-  void SetEorTracking(bool track) override;
+  void SetEorTracking(bool track) override {
+    (void)track;
+  }
 
   bool Connecting() const override {
     return (state_ == StateEnum::CONNECTING);

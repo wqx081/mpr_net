@@ -7,7 +7,7 @@
 
 namespace fb {
 
-class AsyncSocketExpcetion : public std::runtime_error {
+class AsyncSocketException : public std::runtime_error {
  public:
 
   enum AsyncSocketExceptionType {   
@@ -30,11 +30,11 @@ class AsyncSocketExpcetion : public std::runtime_error {
   AsyncSocketExceptionType type_;
   int errno_;
 
-  AsyncSocketExpcetion(AsyncSocketExceptionType type, const std::string& message)
+  AsyncSocketException(AsyncSocketExceptionType type, const std::string& message)
       : std::runtime_error(message),
         type_(type),
         errno_(0) {}
-  AsyncSocketExpcetion(AsyncSocketExceptionType type,
+  AsyncSocketException(AsyncSocketExceptionType type,
                        const std::string& message,
                        int errno_copy) :
         std::runtime_error(GetMessage(message, errno_copy)),
