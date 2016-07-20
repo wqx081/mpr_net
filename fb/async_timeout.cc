@@ -126,7 +126,6 @@ void AsyncTimeout::LibeventCallback(int fd, short events, void* arg) {
   (void)fd;
   (void)events;
 
-  LOG(INFO) << "ev_flags: " << timeout->event_.ev_flags;
   // double check that ev_flags gets reset when the timeout is not running
   assert((timeout->event_.ev_flags & ~EVLIST_INTERNAL) == EVLIST_INIT);
 

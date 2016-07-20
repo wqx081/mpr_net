@@ -41,7 +41,8 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   AsyncSocket(EventBase* event_base, int fd);
   
   static std::shared_ptr<AsyncSocket> NewSocket(EventBase* event_base) {
-    return std::shared_ptr<AsyncSocket>(new AsyncSocket(event_base), Destructor());
+    return std::shared_ptr<AsyncSocket>(new AsyncSocket(event_base), 
+                                        Destructor());
   }
 
   static std::shared_ptr<AsyncSocket> NewSocket(EventBase* event_base,
@@ -60,8 +61,11 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   EventBase* GetEventBase() const override {
     return event_base_;
   }
+
   virtual int GetFd() const { return fd_; }
+
   virtual int DetachFd();
+
   class OptionKey {
    public:
     bool operator<(const OptionKey& other) const {
@@ -77,6 +81,7 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
     int level;
     int optname;
   };
+
   typedef std::map<OptionKey, int> OptionMap;
   static const OptionMap empty_option_map;
   static const net::SocketAddress& AnyAddress();
@@ -86,11 +91,11 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
                        int timeout = 0,
                        const OptionMap& options = empty_option_map,
                        const net::SocketAddress& bind_address = AnyAddress()) noexcept;
-  virtual void Connect(ConnectCallback* callback,
-                       const std::string& ip,
-                       uint16_t port,
-                       int timeout = 0,
-                       const OptionMap& options = empty_option_map) noexcept;
+  void Connect(ConnectCallback* callback,
+               const std::string& ip,
+               uint16_t port,
+               int timeout = 0,
+               const OptionMap& options = empty_option_map) noexcept;
 
   void CancelConnect();
   void SetSendTimeout(uint32_t milliseconds) override;

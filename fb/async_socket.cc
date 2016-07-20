@@ -21,6 +21,10 @@ using std::unique_ptr;
 namespace fb {
 
 const AsyncSocket::OptionMap AsyncSocket::empty_option_map;
+const AsyncSocketException g_socket_closed_locally_ex(AsyncSocketException::END_OF_FILE,
+                                                      "socket closed locally");
+const AsyncSocketException g_socket_shutdown_for_writes_ex(AsyncSocketException::END_OF_FILE,
+                                                      "socket shutdown for writes");
 
 class AsyncSocket::WriteRequest {
  public:
@@ -133,7 +137,15 @@ AsyncSocket::AsyncSocket(EventBase* evb)
       : event_base_(evb),
         write_timeout_(this, evb),
         io_handler_(this, evb) {
+  VLOG(5) << "new AsyncSocket(" << this << ", evb=" << evb << ")";
   Init();
+}
+
+AsyncSocket::AsyncSocket(EventBase* event_base,
+                         const net::SocketAddress& address,
+                         uint32_t connect_timeout) 
+    : AsyncSocket(event_base) {
+  Connect(nullptr, address, connect_timeout);    
 }
 
 AsyncSocket::AsyncSocket(EventBase* event_base,
@@ -175,14 +187,24 @@ void AsyncSocket::Init() {
 }
 
 AsyncSocket::~AsyncSocket() {
+  VLOG(7) << "actual destruction of AsyncSocket(this=" << this
+          << ", evb=" << event_base_ << ", fd=" << fd_
+          << ", state=" << state_ << ")";
 }
 
 void AsyncSocket::Destroy() {
+  VLOG(5) << "AsyncSocket::destroy(this=" << this << ", evb=" << event_base_
+          << ", fd=" << fd_ << ", state=" << state_;
+
   CloseNow();
   DelayedDestruction::Destroy();
 }
 
 int AsyncSocket::DetachFd() {
+  VLOG(6) << "AsyncSocket::detachFd(this=" << this << ", fd=" << fd_
+          << ", evb=" << event_base_ << ", state=" << state_
+          << ", events=" << std::hex << event_flags_ << ")";
+
   if (shutdown_socket_set_) {
     shutdown_socket_set_->Remove(fd_);
   }
@@ -300,7 +322,9 @@ void AsyncSocket::Connect(ConnectCallback* connect_callback,
       }
     } 
 
+    // Perform the connect()
     addr_len = address.ToSockAddrStorage(&addr_storage);
+
     rv = ::connect(fd_, saddr, addr_len); 
     if (rv < 0) {
       if (errno == EINPROGRESS) {
@@ -322,16 +346,16 @@ void AsyncSocket::Connect(ConnectCallback* connect_callback,
         throw AsyncSocketException(AsyncSocketException::NOT_OPEN,
             "connect failed (immediately)", errno);
       }
-    }
+    } 
   } catch (const AsyncSocketException& ex) {
-    (void)ex;
     return FailConnect(__func__, ex);
   } catch (const std::exception& ex) {
     AsyncSocketException tex(AsyncSocketException::INTERNAL_ERROR,
         WithAddress(std::string("unexpected exception: ") + ex.what()));
     return FailConnect(__func__, tex);
   }
-  
+
+  VLOG(8) << "AsyncSocket::Connect succeeded immediately; this=" << this;
   assert(read_callback_ == nullptr);
   assert(write_request_head_ == nullptr);
   state_ = StateEnum::ESTABLISHED;
@@ -397,6 +421,8 @@ void AsyncSocket::SetReadCB(ReadCallback* callback) {
     read_callback_ = nullptr;
     return;
   }
+
+  DestructorGuard dg(this);
   assert(event_base_->IsInEventBaseThread());
   
   switch ((StateEnum)state_) {
@@ -592,6 +618,7 @@ void AsyncSocket::CloseNow() {
       state_ = StateEnum::CLOSED;
 
       write_timeout_.CancelTimeout();
+
       if (event_flags_ != EventHandler::NONE) {
         event_flags_ = EventHandler::NONE;
         if (!UpdateEventRegistration()) {
@@ -606,6 +633,14 @@ void AsyncSocket::CloseNow() {
       }
 
       if (connect_callback_) {
+        ConnectCallback* callback = connect_callback_;
+        connect_callback_ = nullptr;
+        callback->ConnectError(g_socket_closed_locally_ex);
+      }
+
+      FailAllWrites(g_socket_closed_locally_ex);
+
+      if (read_callback_) {
         ReadCallback* callback = read_callback_;
         read_callback_ = nullptr;
         callback->ReadEOF();
@@ -625,12 +660,17 @@ void AsyncSocket::CloseNow() {
       state_ = StateEnum::CLOSED;
       return;
   }
+
+  LOG(DFATAL) << "AsyncSocket::CloseNow() (this=" << this << ", fd=" << fd_
+              << ") called in unknown state " << state_;
 }
 
 void AsyncSocket::CloseWithReset() {
-  if (fd_) {
+  if (fd_ >= 0) {
     struct linger opt_linger = {1, 0};
     if (SetSockOpt(SOL_SOCKET, SO_LINGER, &opt_linger) != 0) {
+      VLOG(2) << "AsyncSocket::CloseWithReset(): error setting SO_LINGER "
+              << " on " << fd_ << ": errno=" << errno;
     }
   }
   CloseNow();
@@ -669,12 +709,14 @@ void AsyncSocket::ShutdownWriteNow() {
       }
 
       ::shutdown(fd_, SHUT_WR);
-      //FailAllWrites(SocketShutdownForWritesEx);
+
+      FailAllWrites(g_socket_shutdown_for_writes_ex);
       return;
     }
     case StateEnum::CONNECTING: {
       shutdown_flags_ |= SHUT_WRITE_PENDING;
-      //FailAllWrites(SocketShutdownForWritesEx);
+
+      FailAllWrites(g_socket_shutdown_for_writes_ex);
       return;
     }
     case StateEnum::UNINIT: 
@@ -685,6 +727,8 @@ void AsyncSocket::ShutdownWriteNow() {
       assert(false); // YES
       return;
   }
+  LOG(DFATAL) << "AsyncSocket::shutdownWriteNow() (this=" << this << ", fd="
+              << fd_ << ") called in unknown state " << state_;
 }
 
 bool AsyncSocket::Readable() const {
@@ -756,8 +800,10 @@ void AsyncSocket::GetLocalAddress(net::SocketAddress* address) const {
 }
 
 void AsyncSocket::GetPeerAddress(net::SocketAddress* address) const {
-  (void)address;
-  //TODO
+  if (addr_.IsNil()) {
+    addr_.SetFromPeerAddress(fd_);
+  }
+  *address = addr_;
 }
 
 int AsyncSocket::SetNoDelay(bool no_delay) {
@@ -888,9 +934,19 @@ void AsyncSocket::HandleRead() noexcept {
     } catch (const AsyncSocketException& ex) {
       return FailRead(__func__, ex);
     } catch (const std::exception& ex) {
+      AsyncSocketException tex(AsyncSocketException::BAD_ARGS,
+          std::string("ReadCallback::GetReadBuffer() threw exception: ") + ex.what());
+      return FailRead(__func__, tex);
     } catch (...) {
+      AsyncSocketException ex(AsyncSocketException::BAD_ARGS,
+          "ReadCallback::GetReadBuffer() threw non-exception type");
+      return FailRead(__func__, ex);
     }
+
     if (buf == nullptr || buf_len == 0) {
+      AsyncSocketException ex(AsyncSocketException::BAD_ARGS,
+          "ReadCallback::GetReadBuffer() returned empty buffer");
+      return FailRead(__func__, ex);
     }
 
     // read
@@ -932,6 +988,7 @@ void AsyncSocket::HandleWrite() noexcept {
     HandleConnect();
     return;
   }
+
   assert(state_ == StateEnum::ESTABLISHED);
   assert((shutdown_flags_ & SHUT_WRITE) == 0);
   assert(write_request_head_ != nullptr);
@@ -944,6 +1001,7 @@ void AsyncSocket::HandleWrite() noexcept {
     if (write_request_head_->GetNext() != nullptr) {
       write_flags = write_flags | WriteFlags::CORK;
     }
+
     int bytes_written = PerformWrite(write_request_head_->GetOps(),
                                      write_request_head_->GetOpCount(),
                                      write_flags,
@@ -1002,6 +1060,9 @@ void AsyncSocket::HandleWrite() noexcept {
   
       if (send_timeout_ > 0) {
         if (!write_timeout_.ScheduleTimeout(send_timeout_)) {
+          AsyncSocketException ex(AsyncSocketException::INTERNAL_ERROR,
+              WithAddress("failed to reschedule write timeout"));
+          return FailWrite(__func__, ex);
         }
       }
       return;
@@ -1017,11 +1078,21 @@ void AsyncSocket::HandleInitialReadWrite() noexcept {
   DestructorGuard dg(this);
 
   if (read_callback_ && !(event_flags_ & EventHandler::READ)) {
+    assert(state_ == StateEnum::ESTABLISHED);
+    assert((shutdown_flags_ & SHUT_READ) == 0);
+    if (!UpdateEventRegistration(EventHandler::READ, 0)) {
+      assert(state_ == StateEnum::ERROR);
+      return;
+    }
+    CheckForImmediateRead();
   } else if (read_callback_ == nullptr) {
+    UpdateEventRegistration(0, EventHandler::READ);
   }
 
   if (write_request_head_ && !(event_flags_ & EventHandler::WRITE)) {
+    HandleWrite();
   } else if (write_request_head_ == nullptr) {
+    UpdateEventRegistration(0, EventHandler::WRITE);
   }
 }
 
@@ -1043,9 +1114,16 @@ void AsyncSocket::HandleConnect() noexcept {
                             errno);
     return FailConnect(__func__, ex);
   }
+
   if (error != 0) {
+    AsyncSocketException ex(AsyncSocketException::NOT_OPEN,
+        "connect failed",
+        errno);
+    return FailConnect(__func__, ex);
   }
+
   state_ = StateEnum::ESTABLISHED;
+
   if ((shutdown_flags_ & SHUT_WRITE_PENDING) && write_request_head_ == nullptr) {
     assert((shutdown_flags_ & SHUT_READ) == 0);
     ::shutdown(fd_, SHUT_WR);
@@ -1053,11 +1131,13 @@ void AsyncSocket::HandleConnect() noexcept {
   }
   
   EventBase* orig_event_base = event_base_;
+
   if (connect_callback_) {
     ConnectCallback* callback = connect_callback_;
     connect_callback_ = nullptr;
     callback->ConnectSuccess();
   }
+
   if (event_base_ != orig_event_base) {
     return;
   }
@@ -1101,9 +1181,11 @@ ssize_t AsyncSocket::PerformWrite(const iovec* vec,
   if (IsSet(flags, WriteFlags::CORK)) {
     msg_flags |= MSG_MORE;
   }
+
   if (IsSet(flags, WriteFlags::EOR)) {
     msg_flags |= MSG_EOR;
   }
+
   ssize_t total_written = ::sendmsg(fd_, &msg, msg_flags);
   if (total_written < 0) {
     if (errno == EAGAIN) {

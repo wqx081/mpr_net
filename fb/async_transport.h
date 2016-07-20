@@ -8,6 +8,10 @@
 #include "fb/async_socket_base.h"
 #include "fb/event_base.h"
 
+namespace net {
+class SocketAddress;
+};
+
 namespace fb {
 
 class AsyncSocketException;
@@ -57,6 +61,7 @@ class AsyncTransport : public DelayedDestruction ,
 
   virtual void ShutdownWrite() =0;
   virtual void ShutdownWriteNow() = 0;
+
   virtual bool Good() const = 0;
   virtual bool Readable() const = 0;
   virtual bool IsPending() const {
@@ -65,16 +70,20 @@ class AsyncTransport : public DelayedDestruction ,
 
   virtual bool Connecting() const = 0;
   virtual bool Error() const = 0;
+
   virtual void AttachEventBase(EventBase* event_base) = 0;
   virtual void DetachEventBase() = 0;
   virtual bool IsDetachable() const = 0;
+
   virtual void SetSendTimeout(uint32_t milliseconds) = 0;
   virtual uint32_t GetSendTimeout() const = 0;
+
   virtual void GetLocalAddress(net::SocketAddress* address) const = 0;
   virtual void GetAddress(net::SocketAddress* address) const {
     return GetLocalAddress(address);
   }
   virtual void GetPeerAddress(net::SocketAddress* address) const = 0;
+
   virtual bool IsEorTrackingEnabled() const = 0;
   virtual void SetEorTracking(bool track) = 0;
   
@@ -108,6 +117,7 @@ class AsyncTransportWrapper : virtual public AsyncTransport {
 
   virtual void SetReadCB(ReadCallback* cb) = 0;
   virtual ReadCallback* GetReadCB() const = 0;
+
   virtual void Write(WriteCallback* cb,
                      const void* buf,
                      size_t bytes,
