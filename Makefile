@@ -68,6 +68,7 @@ CPP_SOURCES := ./fb/event_base.cc \
 	./fb/async_server_socket.cc \
 	./fb/shutdown_socket_set.cc \
 	./fb/io_buffer.cc \
+	./fb/hhwheel_timer.cc \
 	\
 	\
 	./net/ip_address.cc \
@@ -89,6 +90,10 @@ TESTS := ./fb/rw_spin_lock_unittest \
 	./fb/thread_local_unittest \
 	./fb/io_buffer_unittest \
 	./fb/async_socket_unittest \
+	./fb/hhwheel_timer_unittest \
+	\
+	./net/socket_address_unittest \
+	
 
 all: $(CPP_OBJECTS) $(TESTS)
 .cc.o:
@@ -99,9 +104,9 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./base/stl_util_unittest.o: ./base/stl_util_unittest.cc
 	$(CXX) $(CXXFLAGS) $@ $<
 
-./net/message_queue_unittest: ./net/message_queue_unittest.o
+./net/socket_address_unittest: ./net/socket_address_unittest.o
 	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
-./net/message_queue_unittest.o: ./net/message_queue_unittest.cc
+./net/socket_address_unittest.o: ./net/socket_address_unittest.cc
 	$(CXX) $(CXXFLAGS) $@ $<
 
 ./http/http_server_unittest: ./http/http_server_unittest.o
@@ -149,6 +154,11 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./fb/async_socket_unittest: ./fb/async_socket_unittest.o
 	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
 ./fb/async_socket_unittest.o: ./fb/async_socket_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./fb/hhwheel_timer_unittest: ./fb/hhwheel_timer_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./fb/hhwheel_timer_unittest.o: ./fb/hhwheel_timer_unittest.cc
 	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
 
 clean:

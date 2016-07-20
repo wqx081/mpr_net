@@ -1,3 +1,44 @@
+/**
+ * The main libevent / epoll loop.
+ * Generally there is a single *EventBase* per thread, and once started,
+ * nothing else happens on the thread except fd callbacks. For example:
+ *
+ * EventBase event_base;
+ * auto thread = std::thread([&]() {
+ *  event_base.LoopForevent();
+ * });
+ *
+ * EventBase has built-in support for message passing between threads.
+ * To send a function to be run in the EventBase thread, use RunInEventBaseThread().
+ *
+ * EventBase event_base;
+ * auto thread1 = std::thread([&]() {
+ *  event_base.LoopForever();
+ * });
+ *
+ * event_base.RunInEventBaseThread([&]() {
+ *   printf("This will be printed in thread1\n");
+ * });
+ *
+ * There are various ways run the loop.
+ *
+ * 0) EventBase::Loop() will return when there are no more registered events.
+ * 1) EventBase::LoopForever() will loop until EventBase::TerminateLoopSoon() is called.
+ * 2) EventBase::LoopOnce() will only call epoll() a single time.
+ *
+ * Other useful methods
+ *
+ * 0) EventBase::RunAfterDelay() will run events after some delay
+ * 1) EventBase::SetMaxLatency(latency, callback) to run some callback if the loop is running very slowly,
+ *   i.e., there are too many events in this loop, and some code should probably be running in different threads.
+ *
+ * => Tail-latency times are vastly better than any queueing implementation
+ * => The EventHandler implementation is responsible for not taking too long in any individual callback.
+ *    All of the EventHandlers in this implementation already do a good job of this, but if you are
+ *    subclassing EventHandler directly, something to keep in mind.
+ * => The callback cannot delete the EventBase or EventHandler directly, since it is still on the call stack.
+ *    See DelayedDestruction class description.
+ */
 #ifndef FB_EVENT_BASE_H_
 #define FB_EVENT_BASE_H_
 
