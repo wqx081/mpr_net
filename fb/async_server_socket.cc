@@ -214,9 +214,9 @@ void AsyncServerSocket::BindSocket(int fd,
                                    const net::SocketAddress& address,
                                    bool is_existing_socket) {
   sockaddr_storage addr_storage;
-  address.ToSockAddrStorage(&addr_storage);
+  size_t addr_len = address.ToSockAddrStorage(&addr_storage);
   sockaddr* saddr = reinterpret_cast<sockaddr *>(&addr_storage);
-  if (::bind(fd, saddr, address.ipaddr().Size()) != 0) {
+  if (::bind(fd, saddr, addr_len) != 0) {
     if (!is_existing_socket) {
       CloseNoInt(fd);
     }

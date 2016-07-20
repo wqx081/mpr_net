@@ -6,9 +6,6 @@
 namespace fb {
 
 EventHandler::EventHandler(EventBase* event_base, int fd) {
-
-  LOG(INFO) << "fd----: " << fd;
-
   event_set(&event_, fd, 0, &EventHandler::LibeventCallback, this);
   if (event_base != nullptr) {
     SetEventBase(event_base);

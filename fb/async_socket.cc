@@ -240,11 +240,14 @@ void AsyncSocket::Connect(ConnectCallback* connect_callback,
   
   sockaddr_storage addr_storage;
   sockaddr* saddr = reinterpret_cast<sockaddr *>(&addr_storage);
+  size_t addr_len = 0;
   
   try {
     fd_ = socket(address.family(), SOCK_STREAM, 0);
     if (fd_ < 0) {
-      //TODO: throw
+      throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+          WithAddress("failed to create socket"),
+          errno);
     }
     if (shutdown_socket_set_) {
       shutdown_socket_set_->Add(fd_);
@@ -255,11 +258,15 @@ void AsyncSocket::Connect(ConnectCallback* connect_callback,
 
     int flags = fcntl(fd_, F_GETFL, 0);
     if (flags == -1) {
-    //TODO: throw
+      throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+          WithAddress("failed to get socket flags"),
+          errno);
     }
     int rv = fcntl(fd_, F_SETFL, flags | O_NONBLOCK);
     if (rv == -1) {
-    //TODO: throw
+      throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+          WithAddress("failed to put socket in non-blocking mode"),
+          errno);
     }
     if (address.family() != AF_UNIX) {
       (void)SetNoDelay(true);
@@ -270,52 +277,59 @@ void AsyncSocket::Connect(ConnectCallback* connect_callback,
       int one = 1;
       if (::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one))) {
         DoClose();
-        //TODO: throw;
+        throw AsyncSocketException(AsyncSocketException::NOT_OPEN,
+            "failed to setsockopt prior to bind on " + bind_address.ToString(),
+            errno);
       }
 
-      bind_address.ToSockAddrStorage(&addr_storage);
-
-      //TODO
-      if (::bind(fd_, saddr, bind_address.ipaddr().Size())) {
+      addr_len = bind_address.ToSockAddrStorage(&addr_storage);
+      if (::bind(fd_, saddr, addr_len)) {
         DoClose();
-        //TODO: throw
+        throw AsyncSocketException(AsyncSocketException::NOT_OPEN,
+            "failed to bind to async socket: " + bind_address.ToString(),
+            errno);
       }
     }
 
-    //
     for (const auto& opt: options) {
       int rv = opt.first.Apply(fd_, opt.second);
       if (rv != 0) {
-        //TODO: throw
+        throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+            WithAddress("failed to set socket option"),
+            errno);
       }
     } 
 
-    // Connect
-    address.ToSockAddrStorage(&addr_storage);
-    rv = ::connect(fd_, saddr, address.ipaddr().Size());
+    addr_len = address.ToSockAddrStorage(&addr_storage);
+    rv = ::connect(fd_, saddr, addr_len); 
     if (rv < 0) {
       if (errno == EINPROGRESS) {
         if (timeout > 0) {
           if (!write_timeout_.ScheduleTimeout(timeout)) {
-            //TODO: throw
+            throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+                WithAddress("failed to schedule AsyncSocket connect timeout"));
           }
         }
 
         assert(event_flags_ == EventHandler::NONE);
         event_flags_ = EventHandler::WRITE;
         if (!io_handler_.RegisterHandler(event_flags_)) {
-        //TODO: throw
+          throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+              WithAddress("failed to register AsyncSocket connect handler"));
         }
         return;
       } else {
-      //TODO: throw
+        throw AsyncSocketException(AsyncSocketException::NOT_OPEN,
+            "connect failed (immediately)", errno);
       }
     }
   } catch (const AsyncSocketException& ex) {
     (void)ex;
     return FailConnect(__func__, ex);
   } catch (const std::exception& ex) {
-    //return FailConnect(__func__, ex);
+    AsyncSocketException tex(AsyncSocketException::INTERNAL_ERROR,
+        WithAddress(std::string("unexpected exception: ") + ex.what()));
+    return FailConnect(__func__, tex);
   }
   
   assert(read_callback_ == nullptr);
@@ -655,12 +669,11 @@ void AsyncSocket::ShutdownWriteNow() {
       }
 
       ::shutdown(fd_, SHUT_WR);
-      //TODO
+      //FailAllWrites(SocketShutdownForWritesEx);
       return;
     }
     case StateEnum::CONNECTING: {
       shutdown_flags_ |= SHUT_WRITE_PENDING;
-
       //FailAllWrites(SocketShutdownForWritesEx);
       return;
     }
@@ -739,13 +752,12 @@ bool AsyncSocket::IsDetachable() const {
 }
 
 void AsyncSocket::GetLocalAddress(net::SocketAddress* address) const {
-  (void)address;
-  //TODO:
+  address->SetFromLocalAddress(fd_);
 }
 
 void AsyncSocket::GetPeerAddress(net::SocketAddress* address) const {
   (void)address;
-  //TODO:
+  //TODO
 }
 
 int AsyncSocket::SetNoDelay(bool no_delay) {
@@ -1270,89 +1282,89 @@ void AsyncSocket::FailAllWrites(const AsyncSocketException& ex) {
 }
 
 void AsyncSocket::InvalidState(ConnectCallback* callback) {
-    VLOG(5) << "AsyncSocket(this=" << this << ", fd=" << fd_
-               << "): connect() called in invalid state " << state_;
-    AsyncSocketException ex(AsyncSocketException::ALREADY_OPEN,
-                                                       "connect() called with socket in invalid state");
-    if (state_ == StateEnum::CLOSED || state_ == StateEnum::ERROR) {
-      if (callback) {
-        callback->ConnectError(ex);
-      }
-    } else {
-      StartFail();
-      if (callback) {
-        callback->ConnectError(ex);
-      }
-      FinishFail();
+  VLOG(5) << "AsyncSocket(this=" << this << ", fd=" << fd_
+          << "): connect() called in invalid state " << state_;
+  AsyncSocketException ex(AsyncSocketException::ALREADY_OPEN,
+                          "connect() called with socket in invalid state");
+  if (state_ == StateEnum::CLOSED || state_ == StateEnum::ERROR) {
+    if (callback) {
+      callback->ConnectError(ex);
     }
-  }
-  
-  void AsyncSocket::InvalidState(ReadCallback* callback) {
-    VLOG(4) << "AsyncSocket(this=" << this << ", fd=" << fd_
-               << "): setReadCallback(" << callback
-               << ") called in invalid state " << state_;
-  
-    AsyncSocketException ex(AsyncSocketException::NOT_OPEN,
-                                                       "setReadCallback() called with socket in "
-                           "invalid state");
-    if (state_ == StateEnum::CLOSED || state_ == StateEnum::ERROR) {
-      if (callback) {
-        callback->ReadError(ex);
-      }
-    } else {
-      StartFail();
-      if (callback) {
-        callback->ReadError(ex);
-      }
-      FinishFail();
+  } else {
+    StartFail();
+    if (callback) {
+      callback->ConnectError(ex);
     }
+    FinishFail();
   }
+}
+  
+void AsyncSocket::InvalidState(ReadCallback* callback) {
+  VLOG(4) << "AsyncSocket(this=" << this << ", fd=" << fd_
+          << "): setReadCallback(" << callback
+          << ") called in invalid state " << state_;
+  
+  AsyncSocketException ex(AsyncSocketException::NOT_OPEN,
+                          "setReadCallback() called with socket in "
+                          "invalid state");
+  if (state_ == StateEnum::CLOSED || state_ == StateEnum::ERROR) {
+    if (callback) {
+      callback->ReadError(ex);
+    }
+  } else {
+    StartFail();
+    if (callback) {
+      callback->ReadError(ex);
+    }
+    FinishFail();
+  }
+}
 
 void AsyncSocket::InvalidState(WriteCallback* callback) {
-    VLOG(4) << "AsyncSocket(this=" << this << ", fd=" << fd_
-                                           << "): write() called in invalid state " << state_;
+  VLOG(4) << "AsyncSocket(this=" << this << ", fd=" << fd_
+          << "): write() called in invalid state " << state_;
   
-    AsyncSocketException ex(AsyncSocketException::NOT_OPEN,
-                            WithAddress("write() called with socket in invalid state"));
-    if (state_ == StateEnum::CLOSED || state_ == StateEnum::ERROR) {
-      if (callback) {
-        callback->WriteError(0, ex);
-      }
-    } else {
-      StartFail();
-      if (callback) {
-        callback->WriteError(0, ex);
-      }
-      FinishFail();
+  AsyncSocketException ex(AsyncSocketException::NOT_OPEN,
+                          WithAddress("write() called with socket in invalid state"));
+  if (state_ == StateEnum::CLOSED || state_ == StateEnum::ERROR) {
+    if (callback) {
+      callback->WriteError(0, ex);
     }
-  }
-  
-  void AsyncSocket::DoClose() {
-    if (fd_ == -1) return;
-    if (shutdown_socket_set_) {
-      shutdown_socket_set_->Close(fd_);
-    } else {
-      ::close(fd_);
+  } else {
+    StartFail();
+    if (callback) {
+      callback->WriteError(0, ex);
     }
-    fd_ = -1;
+    FinishFail();
   }
+}
   
-  std::ostream& operator << (std::ostream& os,
-                                                          const AsyncSocket::StateEnum& state) {
-    os << static_cast<int>(state);
-    return os;
+void AsyncSocket::DoClose() {
+  if (fd_ == -1) return;
+  if (shutdown_socket_set_) {
+    shutdown_socket_set_->Close(fd_);
+  } else {
+    ::close(fd_);
   }
+  fd_ = -1;
+}
   
-  std::string AsyncSocket::WithAddress(const std::string& s) {
-    net::SocketAddress peer, local;
-    try {
-      GetPeerAddress(&peer);
-      GetLocalAddress(&local);
-    } catch (const std::exception&) {
-    } catch (...) {
-    } 
-    return s + " (peer=" + peer.ToSensitiveString() + ", local=" + local.ToSensitiveString() + ")";
+std::ostream& operator << (std::ostream& os,
+                           const AsyncSocket::StateEnum& state) {
+  os << static_cast<int>(state);
+  return os;
+}
+  
+std::string AsyncSocket::WithAddress(const std::string& s) {
+  net::SocketAddress peer, local;
+  try {
+    GetPeerAddress(&peer);
+    GetLocalAddress(&local);
+  } catch (const std::exception&) {
+  } catch (...) {
   } 
+  return s + " (peer=" + peer.ToSensitiveString() + ", local=" + local.ToSensitiveString() + ")";
+} 
 
 
 } // namespace fb
