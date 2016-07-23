@@ -120,4 +120,158 @@ make_unique(Args&&...) = delete;
                   NotThereYet(i, (end));                   \
                   ++i)
 
+inline uint64_t twang_mix64(uint64_t key) {
+  key = (~key) + (key << 21);  // key *= (1 << 21) - 1; key -= 1;
+  key = key ^ (key >> 24);
+  key = key + (key << 3) + (key << 8);  // key *= 1 + (1 << 3) + (1 << 8)
+  key = key ^ (key >> 14);
+  key = key + (key << 2) + (key << 4);  // key *= 1 + (1 << 2) + (1 << 4)
+  key = key ^ (key >> 28);
+  key = key + (key << 31);  // key *= 1 + (1 << 31)
+  return key;
+}
+
+
+#if 0
+#define FOLLY_HAS_TRUE_XXX(name)                          \
+  BOOST_MPL_HAS_XXX_TRAIT_DEF(name);                      \
+  template <class T> struct name ## _is_true              \
+    : std::is_same<typename T::name, std::true_type> {};  \
+  template <class T> struct has_true_ ## name             \
+  : std::conditional<                                   \
+          has_ ## name <T>::value,                          \
+          name ## _is_true<T>,                              \
+          std::false_type                                   \
+        >:: type {};
+  
+FOLLY_HAS_TRUE_XXX(IsRelocatable)
+FOLLY_HAS_TRUE_XXX(IsZeroInitializable)
+FOLLY_HAS_TRUE_XXX(IsTriviallyCopyable)
+	  
+#undef FOLLY_HAS_TRUE_XXX
+#endif
+
+#define AVOID_FALSE_SHARING __attribute__((__aligned__(128)))
+
+enum {
+  kFalseSharingRange = 128
+};
+
+
+
+#include <boost/type_traits.hpp>
+#include <boost/mpl/and.hpp>
+#include <boost/mpl/has_xxx.hpp>
+#include <boost/mpl/not.hpp>
+
+namespace traits_detail {
+	  
+#define FOLLY_HAS_TRUE_XXX(name)                          \
+  BOOST_MPL_HAS_XXX_TRAIT_DEF(name);                      \
+  template <class T> struct name ## _is_true              \
+    : std::is_same<typename T::name, std::true_type> {};  \
+  template <class T> struct has_true_ ## name             \
+    : std::conditional<                                   \
+        has_ ## name <T>::value,                          \
+        name ## _is_true<T>,                              \
+        std::false_type                                   \
+>:: type {};
+	  
+FOLLY_HAS_TRUE_XXX(IsRelocatable)
+FOLLY_HAS_TRUE_XXX(IsZeroInitializable)
+FOLLY_HAS_TRUE_XXX(IsTriviallyCopyable)
+		        
+#undef FOLLY_HAS_TRUE_XXX
+}
+
+template <class T> struct IsTriviallyCopyable
+    : std::integral_constant<bool,
+	        !std::is_class<T>::value ||
+	             traits_detail::has_true_IsTriviallyCopyable<T>::value
+	           > {};
+  
+template <class T> struct IsRelocatable
+      : std::integral_constant<bool,
+	        !std::is_class<T>::value ||
+	               IsTriviallyCopyable<T>::value ||
+	               traits_detail::has_true_IsRelocatable<T>::value
+	             > {};
+      
+template <class T> struct IsZeroInitializable
+      : std::integral_constant<bool,
+	        !std::is_class<T>::value ||
+	               traits_detail::has_true_IsZeroInitializable<T>::value
+	             > {};
+
+
+#include <utility>
+#include <functional>
+#include <tuple>
+
+namespace fb {
+
+inline uint64_t hash_128_to_64(const uint64_t upper, const uint64_t lower) {
+	  const uint64_t kMul = 0x9ddfea08eb382d69ULL;
+	    uint64_t a = (lower ^ upper) * kMul;
+	      a ^= (a >> 47);
+	        uint64_t b = (upper ^ a) * kMul;
+		  b ^= (b >> 47);
+		    b *= kMul;
+		      return b;
+}
+
+
+template <class Hasher>
+inline size_t hash_combine_generic() {
+  return 0;
+}
+
+template <
+    class Iter,
+     class Hash = std::hash<typename std::iterator_traits<Iter>::value_type>>
+     uint64_t hash_range(Iter begin,
+Iter end,
+uint64_t hash = 0,
+Hash hasher = Hash()) {
+  for (; begin != end; ++begin) {
+  hash = hash_128_to_64(hash, hasher(*begin));
+}
+return hash;
+}
+
+template <class Hasher, typename T, typename... Ts>
+	size_t hash_combine_generic(const T& t, const Ts&... ts) {
+		  size_t seed = Hasher::hash(t);
+		    if (sizeof...(ts) == 0) {
+			        return seed;
+				  }
+		      size_t remainder = hash_combine_generic<Hasher>(ts...);
+		        return hash_128_to_64(seed, remainder);
+	}
+
+
+class StdHasher {
+ public:
+  template <typename T>
+  static size_t hash(const T& t) {
+    return std::hash<T>()(t);
+  }
+};
+
+template <typename T, typename... Ts>
+size_t hash_combine(const T& t, const Ts&... ts) {
+  return hash_combine_generic<StdHasher>(t, ts...);
+}
+
+} // namespace fb
+namespace std {
+template <typename T1, typename T2>
+struct hash<std::pair<T1, T2> > {
+ public:
+  size_t operator()(const std::pair<T1, T2>& x) const {
+    return fb::hash_combine(x.first, x.second);
+  }
+};
+} // namespace std
+
 #endif // BASE_MACROS_H_

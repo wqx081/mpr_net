@@ -75,6 +75,13 @@ CPP_SOURCES := ./fb/event_base.cc \
 	./net/socket_address.cc \
 	\
 	\
+	\
+	./common/futex.cc \
+	./common/memory_idler.cc \
+	./common/semaphore.cc \
+	./common/thread_pool_executor.cc \
+	./common/cpu_thread_pool_executor.cc \
+	\
 	./fb/test/socket_pair.cc \
 	./fb/test/time_util.cc \
 
@@ -92,7 +99,8 @@ TESTS := ./fb/rw_spin_lock_unittest \
 	./fb/async_socket_unittest \
 	./fb/hhwheel_timer_unittest \
 	\
-	./net/socket_address_unittest \
+	./common/observer_unittest \
+	./common/cpu_thread_pool_executor_unittest \
 	
 
 all: $(CPP_OBJECTS) $(TESTS)
@@ -161,10 +169,22 @@ all: $(CPP_OBJECTS) $(TESTS)
 ./fb/hhwheel_timer_unittest.o: ./fb/hhwheel_timer_unittest.cc
 	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
 
+###############################################
+./common/observer_unittest: ./common/observer_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./common/observer_unittest.o: ./common/observer_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
+./common/cpu_thread_pool_executor_unittest: ./common/cpu_thread_pool_executor_unittest.o
+	$(CXX) -o $@ $< $(CPP_OBJECTS) $(LIB_FILES)
+./common/cpu_thread_pool_executor_unittest.o: ./common/cpu_thread_pool_executor_unittest.cc
+	$(CXX) -Wno-unused-variable $(CXXFLAGS) $@ $<
+
 clean:
 	rm -fr base/*.o
 	rm -fr crypto/*.o
 	rm -fr net/*.o
 	rm -fr http/*.o
 	rm -fr fb/*.o
+	rm -fr common/*.o
 	rm -fr $(TESTS)
